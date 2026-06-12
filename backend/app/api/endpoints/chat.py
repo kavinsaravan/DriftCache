@@ -12,7 +12,7 @@ from app.models.schemas import (
     ErrorResponse,
     ErrorDetail,
 )
-from app.llm.claude_provider import claude_provider
+from app.providers.router import provider_router
 
 router = APIRouter()
 
@@ -44,9 +44,9 @@ async def create_chat_completion(request: ChatCompletionRequest):
 
         # Handle streaming vs non-streaming
         if request.stream:
-            # Return streaming response
+            # Return streaming response using provider router
             return StreamingResponse(
-                claude_provider.create_streaming_completion(
+                provider_router.chat_completion_stream(
                     model=request.model,
                     messages=request.messages,
                     temperature=request.temperature,
@@ -56,8 +56,8 @@ async def create_chat_completion(request: ChatCompletionRequest):
                 media_type="text/event-stream",
             )
         else:
-            # Return non-streaming response
-            response = await claude_provider.create_completion(
+            # Return non-streaming response using provider router
+            response = await provider_router.chat_completion(
                 model=request.model,
                 messages=request.messages,
                 temperature=request.temperature,

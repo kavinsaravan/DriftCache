@@ -39,8 +39,10 @@ class Settings(BaseSettings):
             return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
-    # LLM Configuration
+    # LLM Provider Configuration
     ANTHROPIC_API_KEY: str = Field(default="")
+    OPENAI_API_KEY: str = Field(default="")
+    OLLAMA_BASE_URL: str = Field(default="http://localhost:11434")
     DEFAULT_MODEL: str = Field(default="claude-3-5-sonnet-20241022")
 
     # Semantic Cache Settings
