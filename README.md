@@ -58,8 +58,4 @@ DriftCache/
 
 ## Getting Started
 
-[To be added during implementation]
 
-## License
-
-[To be determined]
