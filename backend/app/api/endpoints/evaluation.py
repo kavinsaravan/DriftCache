@@ -14,6 +14,8 @@ from pydantic import BaseModel, Field
 from app.database.session import get_db
 from app.evaluation.point_in_time import get_point_in_time_evaluator
 from app.evaluation.replay import get_cache_replayer
+from app.evaluation.reports import get_report_generator
+from app.models.evaluation_result import EvaluationResult
 
 logger = logging.getLogger(__name__)
 
@@ -250,6 +252,174 @@ async def evaluation_health():
             "point_in_time_evaluation",
             "cache_decision_replay",
             "threshold_comparison",
-            "batch_evaluation"
+            "batch_evaluation",
+            "cache_quality_evaluation"
         ]
     }
+
+
+# Cache Quality Evaluation Endpoints
+
+class CacheQualityEvaluationRequest(BaseModel):
+    """Request for cache quality evaluation"""
+    dataset_name: str = Field("default", description="Test dataset to use (default or minimal)")
+    threshold: float = Field(0.90, ge=0.0, le=1.0, description="Threshold to evaluate")
+    tenant_id: Optional[str] = Field(None, description="Optional tenant filter")
+
+
+@router.post("/quality/run")
+async def run_cache_quality_evaluation(
+    request: CacheQualityEvaluationRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Run cache quality evaluation on test dataset
+
+    Evaluates whether semantic cache decisions are reliable by:
+    - Testing against labeled prompt pairs
+    - Calculating precision (valid hits / total hits)
+    - Calculating recall (correct hits / all reusable)
+    - Measuring false hit rate (dangerous errors)
+    - Measuring false miss rate (missed savings)
+    - Recommending threshold adjustments
+
+    Args:
+        request: Evaluation configuration
+        db: Database session
+
+    Returns:
+        Complete evaluation results with metrics and recommendations
+    """
+    try:
+        with get_report_generator(session=db) as generator:
+            result = generator.run_evaluation(
+                dataset_name=request.dataset_name,
+                threshold=request.threshold,
+                tenant_id=request.tenant_id,
+                save_to_db=True
+            )
+
+        return {
+            "evaluation_run_id": result.evaluation_run_id,
+            "dataset": result.dataset_name,
+            "threshold": result.threshold_used,
+            "metrics": {
+                "precision": round(result.precision, 4),
+                "recall": round(result.recall, 4),
+                "f1_score": round(result.f1_score, 4),
+                "false_hit_rate": round(result.false_hit_rate, 4),
+                "false_miss_rate": round(result.false_miss_rate, 4),
+            },
+            "counts": {
+                "total_test_cases": result.total_test_cases,
+                "true_positives": result.true_positives,
+                "true_negatives": result.true_negatives,
+                "false_positives": result.false_positives,
+                "false_negatives": result.false_negatives,
+            },
+            "recommendation": {
+                "action": result.recommended_action,
+                "confidence": round(result.recommendation_confidence, 4) if result.recommendation_confidence else None,
+                "details": result.recommendation_details,
+            },
+            "created_at": result.created_at.isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Cache quality evaluation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Evaluation failed: {str(e)}")
+
+
+@router.get("/quality/latest")
+async def get_latest_quality_evaluation(
+    tenant_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Get most recent cache quality evaluation
+
+    Args:
+        tenant_id: Optional tenant filter
+        db: Database session
+
+    Returns:
+        Latest evaluation results
+    """
+    try:
+        with get_report_generator(session=db) as generator:
+            result = generator.get_latest_evaluation(tenant_id=tenant_id)
+
+        if not result:
+            raise HTTPException(status_code=404, detail="No evaluation results found")
+
+        return result.to_summary_dict()
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get latest evaluation: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve evaluation")
+
+
+@router.get("/quality/history")
+async def get_quality_evaluation_history(
+    tenant_id: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=500),
+    db: Session = Depends(get_db)
+):
+    """
+    Get cache quality evaluation history
+
+    Args:
+        tenant_id: Optional tenant filter
+        limit: Maximum results to return
+        db: Database session
+
+    Returns:
+        List of historical evaluation results
+    """
+    try:
+        with get_report_generator(session=db) as generator:
+            results = generator.get_evaluation_history(tenant_id=tenant_id, limit=limit)
+
+        return {
+            "total": len(results),
+            "evaluations": [result.to_summary_dict() for result in results]
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get evaluation history: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve history")
+
+
+@router.get("/quality/trend")
+async def get_threshold_trend_analysis(
+    tenant_id: Optional[str] = Query(None),
+    limit: int = Query(10, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    """
+    Analyze how metrics change across different thresholds
+
+    Useful for:
+    - Finding optimal threshold
+    - Understanding precision/recall tradeoff
+    - Supporting autonomous threshold optimization
+
+    Args:
+        tenant_id: Optional tenant filter
+        limit: Number of recent evaluations to analyze
+        db: Database session
+
+    Returns:
+        Threshold trend analysis
+    """
+    try:
+        with get_report_generator(session=db) as generator:
+            analysis = generator.analyze_threshold_trend(tenant_id=tenant_id, limit=limit)
+
+        return analysis
+
+    except Exception as e:
+        logger.error(f"Failed to analyze threshold trend: {e}")
+        raise HTTPException(status_code=500, detail="Trend analysis failed")
