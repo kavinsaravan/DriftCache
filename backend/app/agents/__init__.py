@@ -1,1 +1,5 @@
-"""Autonomous optimization agents using LangGraph"""
+"""
+Agents Module
+
+LangGraph-based autonomous infrastructure management
+"""
