@@ -1,7 +1,10 @@
 """
 Main FastAPI application entry point
 
-Week 3 Update: Added Redis lifecycle management
+Week 3 Updates:
+- Redis lifecycle management
+- PostgreSQL database initialization
+- Historical event recording
 """
 import logging
 from contextlib import asynccontextmanager
@@ -11,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.redis import get_redis_manager, shutdown_redis
+from app.database.session import get_db_manager, shutdown_db
 from app.api.routes import api_router
 
 logger = logging.getLogger(__name__)
@@ -26,8 +30,25 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting DriftCache API...")
 
+    # Initialize PostgreSQL database
     try:
-        # Initialize Redis connection
+        db_manager = get_db_manager()
+        logger.info("PostgreSQL connection established")
+
+        # Create tables if they don't exist (for dev)
+        # In production, use Alembic migrations
+        try:
+            db_manager.create_tables()
+            logger.info("Database tables initialized")
+        except Exception as e:
+            logger.warning(f"Failed to create tables (may already exist): {e}")
+
+    except Exception as e:
+        logger.error(f"Failed to connect to PostgreSQL: {e}")
+        logger.warning("Running without PostgreSQL - historical recording disabled")
+
+    # Initialize Redis connection
+    try:
         redis_manager = await get_redis_manager()
         logger.info("Redis connection established")
     except Exception as e:
@@ -40,6 +61,8 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down DriftCache API...")
     await shutdown_redis()
     logger.info("Redis connection closed")
+    shutdown_db()
+    logger.info("PostgreSQL connection closed")
 
 
 # Initialize FastAPI app
@@ -78,6 +101,16 @@ async def root():
 @app.get("/health")
 async def health_check():
     """Detailed health check"""
+    # Check PostgreSQL health
+    db_status = "disconnected"
+    try:
+        db_manager = get_db_manager()
+        is_healthy = db_manager.health_check()
+        db_status = "connected" if is_healthy else "unhealthy"
+    except Exception as e:
+        logger.error(f"PostgreSQL health check failed: {e}")
+        db_status = "error"
+
     # Check Redis health
     redis_status = "disconnected"
     try:
@@ -88,9 +121,13 @@ async def health_check():
         logger.error(f"Redis health check failed: {e}")
         redis_status = "error"
 
+    # Overall status
+    all_healthy = db_status == "connected" and redis_status == "connected"
+    overall_status = "healthy" if all_healthy else "degraded"
+
     return {
-        "status": "healthy" if redis_status == "connected" else "degraded",
-        "database": "not_configured",  # TODO: Add actual DB check
+        "status": overall_status,
+        "database": db_status,
         "redis": redis_status,
         "llm": "configured"  # TODO: Add actual LLM check
     }
