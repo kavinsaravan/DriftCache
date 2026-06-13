@@ -55,9 +55,14 @@ class CacheEvent(Base):
     matched_cache_id = Column(String(36), nullable=True, index=True)  # NULL for misses
     similarity_score = Column(Float, nullable=True)  # NULL for misses
 
-    # Decision parameters
+    # Decision parameters (Point-in-Time Evaluation)
     threshold_used = Column(Float, nullable=False)  # Threshold at time of decision
     threshold_version_id = Column(Integer, nullable=True)  # Link to threshold_versions
+
+    # Versioning for Point-in-Time Evaluation
+    embedding_model = Column(String(100), nullable=True, index=True)  # e.g., "all-MiniLM-L6-v2"
+    index_version_id = Column(Integer, nullable=True)  # Link to index_versions
+    provider_model = Column(String(100), nullable=True)  # Model that generated cached response
 
     # Performance metrics
     latency_ms = Column(Float, nullable=True)  # Cache lookup latency

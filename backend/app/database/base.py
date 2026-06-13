@@ -18,3 +18,4 @@ def import_models():
     from app.models import embedding_record  # noqa
     from app.models import provider_call  # noqa
     from app.models import threshold_version  # noqa
+    from app.models import index_version  # noqa

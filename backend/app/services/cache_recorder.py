@@ -112,9 +112,12 @@ class CacheRecorder:
         # Calculate latency
         latency_ms = (datetime.utcnow() - start_time).total_seconds() * 1000
 
-        # Get current threshold
+        # Get current threshold and index version for point-in-time tracking
         threshold_used = settings.SIMILARITY_THRESHOLD
         threshold_version_id = None
+        index_version_id = None
+        embedding_model = settings.EMBEDDING_MODEL
+        provider_model = None
 
         try:
             with db_manager.session_scope() as session:
@@ -123,10 +126,23 @@ class CacheRecorder:
                 if current_threshold:
                     threshold_used = current_threshold.threshold_value
                     threshold_version_id = current_threshold.id
-        except Exception as e:
-            logger.warning(f"Failed to get current threshold: {e}")
 
-        # Record cache event
+                # Get current index version
+                from app.repositories.index_repo import IndexRepository
+                index_repo = IndexRepository(session)
+                current_index = index_repo.get_current()
+                if current_index:
+                    index_version_id = current_index.id
+                    embedding_model = current_index.embedding_model
+
+                # Get provider model from cached response (if HIT)
+                if decision_result.cached_response:
+                    provider_model = decision_result.cached_response.model_name
+
+        except Exception as e:
+            logger.warning(f"Failed to get current versions: {e}")
+
+        # Record cache event with point-in-time versioning
         try:
             with db_manager.session_scope() as session:
                 cache_repo = CacheRepository(session)
@@ -134,7 +150,9 @@ class CacheRecorder:
                 # Map CacheDecision to CacheStatus
                 cache_status = self._map_decision_to_status(decision_result.decision)
 
-                cache_repo.create_event(
+                # Create event with versioning info
+                from app.models.cache_event import CacheEvent
+                event = CacheEvent(
                     request_id=request_id,
                     cache_status=cache_status,
                     threshold_used=threshold_used,
@@ -144,9 +162,16 @@ class CacheRecorder:
                     similarity_score=decision_result.similarity,
                     latency_ms=latency_ms,
                     retrieval_source="redis" if decision_result.is_hit() else None,
-                    threshold_version_id=threshold_version_id
+                    threshold_version_id=threshold_version_id,
+                    # Point-in-time versioning
+                    embedding_model=embedding_model,
+                    index_version_id=index_version_id,
+                    provider_model=provider_model
                 )
-                logger.debug(f"Recorded cache event: {cache_status.value}")
+
+                session.add(event)
+                session.commit()
+                logger.debug(f"Recorded cache event: {cache_status.value} (with versioning)")
         except Exception as e:
             logger.error(f"Failed to record cache event: {e}")
 

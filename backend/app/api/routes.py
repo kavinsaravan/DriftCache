@@ -2,13 +2,16 @@
 Main API router
 """
 from fastapi import APIRouter
-from app.api.endpoints import chat, models
+from app.api.endpoints import chat, models, evaluation
 
 api_router = APIRouter()
 
 # OpenAI-compatible endpoints
 api_router.include_router(models.router, tags=["models"])
 api_router.include_router(chat.router, tags=["chat"])
+
+# Evaluation endpoints
+api_router.include_router(evaluation.router, tags=["evaluation"])
 
 # API status endpoint
 @api_router.get("/status")
