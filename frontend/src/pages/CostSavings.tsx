@@ -8,8 +8,6 @@ import { DollarSign, TrendingDown, Coins, Percent } from 'lucide-react';
 import {
   BarChart,
   Bar,
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -217,7 +215,7 @@ export default function CostSavings() {
                   fill="#8884d8"
                   dataKey="cost"
                 >
-                  {modelBreakdownData.map((entry, index) => (
+                  {modelBreakdownData.map((_, index) => (
                     <Cell
                       key={`cell-${index}`}
                       fill={['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'][index % 5]}

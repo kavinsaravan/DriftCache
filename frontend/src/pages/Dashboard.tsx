@@ -9,7 +9,6 @@ import { useQuery } from '@tanstack/react-query';
 import {
   Activity,
   CheckCircle2,
-  Clock,
   DollarSign,
   TrendingUp,
   Zap,
@@ -24,8 +23,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  LineChart,
-  Line,
   PieChart,
   Pie,
   Cell,
@@ -59,7 +56,7 @@ export default function Dashboard() {
 
   if (!data) return null;
 
-  const { summary, latency, similarity_distribution, top_cached_prompts, provider_usage } = data;
+  const { summary, latency, similarity_distribution, top_cached_prompts } = data;
 
   // Calculate hit rate percentage
   const hitRatePercent = Math.round(summary.cache_hit_rate * 100);
