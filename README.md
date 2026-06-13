@@ -158,11 +158,4 @@ curl -X POST http://localhost:8000/agents/cache-maintenance/run
 - **Drift:** Semantic distribution changes, drift severity
 - **Agent:** Decision patterns, success rate, execution time
 
-## Project Status
 
-**Current:** Week 6 - Autonomous agents operational (dry-run mode)
-**Next:** Week 7 - Production hardening and live optimization
-
-## License
-
-MIT
