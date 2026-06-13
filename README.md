@@ -94,6 +94,43 @@ Load State → Analyze Drift → Analyze Quality → Decide → Execute → Vali
 - Threshold adjustment
 - Index rebuild scheduling
 
+## Project Structure
+
+```
+DriftCache/
+├── backend/
+│   ├── app/
+│   │   ├── api/
+│   │   │   ├── endpoints/
+│   │   │   │   ├── chat.py              # OpenAI-compatible chat
+│   │   │   │   ├── models.py            # Model listing
+│   │   │   │   ├── evaluation.py        # Quality evaluation
+│   │   │   │   ├── metrics.py           # Metrics API
+│   │   │   │   ├── drift.py             # Drift detection
+│   │   │   │   └── agents.py            # Autonomous agents
+│   │   │   └── routes.py
+│   │   ├── agents/
+│   │   │   ├── tools/                   # LangChain tools
+│   │   │   ├── workflows/               # LangGraph workflows
+│   │   │   ├── state.py                 # Workflow state
+│   │   │   └── tool_registry.py
+│   │   ├── core/
+│   │   │   ├── cache.py                 # Caching logic
+│   │   │   ├── embeddings.py            # Embedding generation
+│   │   │   └── vector_store.py          # FAISS vector store
+│   │   ├── models/                      # SQLAlchemy models
+│   │   ├── services/                    # Business logic
+│   │   └── database/
+│   ├── alembic/
+│   │   └── versions/                    # Database migrations
+│   └── requirements.txt
+├── frontend/
+│   └── src/
+│       ├── components/                  # React components
+│       └── App.jsx
+└── README.md
+```
+
 ## API Endpoints
 
 ```bash
