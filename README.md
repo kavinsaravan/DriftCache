@@ -27,6 +27,10 @@ These are semantically identical but traditional systems send BOTH to the LLM, p
 - **Drift Detection** - Monitors semantic distribution changes over time
 - **Production Observability** - Real-time metrics, quality evaluation, cost tracking
 - **OpenAI-Compatible API** - Drop-in replacement for existing integrations
+- **Scalable infrastructure** - Built for production workloads
+- **Lower LLM costs** - Avoid redundant API calls
+- **Lower latency** - Serve from cache when possible
+  
 
 ## Architecture
 
