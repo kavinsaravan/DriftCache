@@ -1,0 +1,244 @@
+"""
+Threshold Optimizer Agent
+
+Autonomous agent that optimizes similarity threshold for cache decisions
+"""
+from typing import Dict, Any, Optional
+import logging
+from datetime import datetime
+
+from app.optimization.threshold_search import ThresholdSearcher
+from app.optimization.scoring import ThresholdScorer, ScoringWeights
+from app.optimization.policy import OptimizationPolicy, OptimizationConstraints
+from app.models.optimization_run import OptimizationRun
+from app.models.threshold_version import ThresholdVersion
+from app.database.session import get_db_session
+
+logger = logging.getLogger(__name__)
+
+
+class ThresholdOptimizerAgent:
+    """
+    Autonomous threshold optimization agent
+
+    Responsibilities:
+    1. Analyze current cache quality
+    2. Test candidate thresholds
+    3. Select optimal threshold
+    4. Deploy threshold changes (with safety constraints)
+    5. Record optimization history
+
+    This is the component that makes DriftCache self-optimizing
+    """
+
+    def __init__(
+        self,
+        scoring_weights: Optional[ScoringWeights] = None,
+        constraints: Optional[OptimizationConstraints] = None
+    ):
+        self.scorer = ThresholdScorer(weights=scoring_weights)
+        self.policy = OptimizationPolicy(constraints=constraints)
+        self.searcher = ThresholdSearcher(scorer=self.scorer, policy=self.policy)
+
+    def optimize_threshold(
+        self,
+        current_threshold: float,
+        current_metrics: Dict[str, float],
+        evaluation_dataset: list[Dict[str, Any]],
+        drift_severity: Optional[str] = None,
+        trigger_source: str = "agent",
+        tenant_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Run threshold optimization
+
+        Args:
+            current_threshold: Current active threshold
+            current_metrics: Current cache quality metrics
+            evaluation_dataset: Test cases for evaluation
+            drift_severity: Current drift level (no_drift, moderate_drift, high_drift)
+            trigger_source: What triggered this optimization (agent, manual, scheduled)
+            tenant_id: Optional tenant isolation
+
+        Returns:
+            Optimization result with decision and new threshold
+        """
+        logger.info("Starting threshold optimization")
+        logger.info(f"  Current threshold: {current_threshold}")
+        logger.info(f"  Current precision: {current_metrics.get('precision', 0):.3f}")
+        logger.info(f"  Current recall: {current_metrics.get('recall', 0):.3f}")
+        logger.info(f"  Current false hit rate: {current_metrics.get('false_hit_rate', 0):.3f}")
+        logger.info(f"  Drift severity: {drift_severity}")
+        logger.info(f"  Evaluation dataset size: {len(evaluation_dataset)}")
+
+        # Run threshold search
+        optimization_result = self.searcher.search_optimal_threshold(
+            current_threshold=current_threshold,
+            evaluation_dataset=evaluation_dataset,
+            current_metrics=current_metrics,
+            drift_severity=drift_severity,
+            false_hit_rate=current_metrics.get("false_hit_rate")
+        )
+
+        # Store optimization run in database
+        with get_db_session() as session:
+            optimization_run = OptimizationRun(
+                run_id=optimization_result["run_id"],
+                trigger_source=trigger_source,
+                old_threshold=optimization_result["old_threshold"],
+                new_threshold=optimization_result["new_threshold"],
+                precision_before=current_metrics.get("precision"),
+                recall_before=current_metrics.get("recall"),
+                false_hit_rate_before=current_metrics.get("false_hit_rate"),
+                false_miss_rate_before=current_metrics.get("false_miss_rate"),
+                f1_score_before=current_metrics.get("f1_score"),
+                precision_after_estimate=optimization_result.get("after_estimate", {}).get("precision"),
+                recall_after_estimate=optimization_result.get("after_estimate", {}).get("recall"),
+                false_hit_rate_after_estimate=optimization_result.get("after_estimate", {}).get("false_hit_rate"),
+                false_miss_rate_after_estimate=optimization_result.get("after_estimate", {}).get("false_miss_rate"),
+                f1_score_after_estimate=optimization_result.get("after_estimate", {}).get("f1_score"),
+                decision=optimization_result["decision"],
+                decision_reason=optimization_result["decision_reason"],
+                optimization_score=optimization_result.get("optimization_score"),
+                candidates_tested=optimization_result.get("candidates_tested"),
+                candidate_scores=optimization_result.get("candidate_scores"),
+                precision_weight=self.scorer.weights.precision,
+                recall_weight=self.scorer.weights.recall,
+                cost_weight=self.scorer.weights.cost_savings,
+                latency_weight=self.scorer.weights.latency,
+                dataset_size=len(evaluation_dataset),
+                execution_time_ms=optimization_result.get("execution_time_ms"),
+                constraints_applied=optimization_result.get("constraints_applied"),
+                tenant_id=tenant_id,
+                started_at=datetime.fromisoformat(optimization_result["started_at"]),
+                completed_at=datetime.fromisoformat(optimization_result["completed_at"]),
+            )
+
+            session.add(optimization_run)
+            session.commit()
+            session.refresh(optimization_run)
+
+            optimization_result["optimization_run_id"] = optimization_run.id
+
+        # If threshold should be deployed, create threshold version
+        if optimization_result["decision"] in ["deploy", "simulated"]:
+            threshold_version_id = self._record_threshold_version(
+                optimization_result=optimization_result,
+                optimization_run_id=optimization_run.id,
+                tenant_id=tenant_id
+            )
+            optimization_result["threshold_version_id"] = threshold_version_id
+
+        # Generate explanation
+        explanation = self.searcher.explain_optimization(optimization_result)
+        optimization_result["explanation"] = explanation
+
+        logger.info(f"Threshold optimization complete: {optimization_result['decision']}")
+        logger.info(f"\n{explanation}")
+
+        return optimization_result
+
+    def _record_threshold_version(
+        self,
+        optimization_result: Dict[str, Any],
+        optimization_run_id: int,
+        tenant_id: Optional[str] = None
+    ) -> int:
+        """
+        Record threshold version in database
+
+        Args:
+            optimization_result: Optimization result
+            optimization_run_id: ID of optimization run
+            tenant_id: Optional tenant isolation
+
+        Returns:
+            Threshold version ID
+        """
+        with get_db_session() as session:
+            # Deactivate previous threshold
+            previous_versions = session.query(ThresholdVersion).filter(
+                ThresholdVersion.is_active == True,
+                ThresholdVersion.tenant_id == tenant_id
+            ).all()
+
+            now = datetime.utcnow()
+            for prev in previous_versions:
+                prev.is_active = False
+                prev.active_until = now
+
+            # Create new threshold version
+            new_version = ThresholdVersion(
+                old_threshold=optimization_result["old_threshold"],
+                threshold_value=optimization_result["new_threshold"],
+                reason=optimization_result["decision_reason"],
+                created_by="agent:threshold_optimizer",
+                optimization_run_id=optimization_run_id,
+                precision_before=optimization_result.get("before", {}).get("precision"),
+                recall_before=optimization_result.get("before", {}).get("recall"),
+                false_hit_rate_before=optimization_result.get("before", {}).get("false_hit_rate"),
+                false_miss_rate_before=optimization_result.get("before", {}).get("false_miss_rate"),
+                precision_after_estimate=optimization_result.get("after_estimate", {}).get("precision"),
+                recall_after_estimate=optimization_result.get("after_estimate", {}).get("recall"),
+                false_hit_rate_after_estimate=optimization_result.get("after_estimate", {}).get("false_hit_rate"),
+                false_miss_rate_after_estimate=optimization_result.get("after_estimate", {}).get("false_miss_rate"),
+                active_from=now,
+                active_until=None,  # Currently active
+                is_active=True,
+                deployed_at=now if optimization_result["decision"] == "deploy" else None,
+                tenant_id=tenant_id
+            )
+
+            session.add(new_version)
+            session.commit()
+            session.refresh(new_version)
+
+            logger.info(f"Created threshold version: {new_version.id}")
+            return new_version.id
+
+    def get_current_threshold(self, tenant_id: Optional[str] = None) -> float:
+        """
+        Get current active threshold
+
+        Args:
+            tenant_id: Optional tenant isolation
+
+        Returns:
+            Current threshold value
+        """
+        with get_db_session() as session:
+            version = session.query(ThresholdVersion).filter(
+                ThresholdVersion.is_active == True,
+                ThresholdVersion.tenant_id == tenant_id
+            ).order_by(ThresholdVersion.created_at.desc()).first()
+
+            if version:
+                return version.threshold_value
+            else:
+                # Default threshold
+                return 0.90
+
+    def get_optimization_history(
+        self,
+        limit: int = 10,
+        tenant_id: Optional[str] = None
+    ) -> list[Dict[str, Any]]:
+        """
+        Get recent optimization runs
+
+        Args:
+            limit: Number of runs to return
+            tenant_id: Optional tenant filter
+
+        Returns:
+            List of optimization run summaries
+        """
+        with get_db_session() as session:
+            query = session.query(OptimizationRun)
+
+            if tenant_id:
+                query = query.filter(OptimizationRun.tenant_id == tenant_id)
+
+            runs = query.order_by(OptimizationRun.created_at.desc()).limit(limit).all()
+
+            return [run.to_dict() for run in runs]
