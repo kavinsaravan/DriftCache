@@ -1,0 +1,16 @@
+{
+  "dataset_name": "exact_repeats",
+  "description": "Same prompts repeated multiple times to test basic caching",
+  "prompts": [
+    {"id": 1, "prompt": "What is Python?", "repeat_count": 50},
+    {"id": 2, "prompt": "Explain machine learning in simple terms.", "repeat_count": 50},
+    {"id": 3, "prompt": "What are the benefits of cloud computing?", "repeat_count": 50},
+    {"id": 4, "prompt": "How does Docker work?", "repeat_count": 50},
+    {"id": 5, "prompt": "Explain REST API.", "repeat_count": 50},
+    {"id": 6, "prompt": "What is semantic caching?", "repeat_count": 50},
+    {"id": 7, "prompt": "Describe microservices architecture.", "repeat_count": 50},
+    {"id": 8, "prompt": "What is continuous integration?", "repeat_count": 50},
+    {"id": 9, "prompt": "Explain database indexing.", "repeat_count": 50},
+    {"id": 10, "prompt": "What is Redis used for?", "repeat_count": 50}
+  ]
+}

@@ -1,0 +1,126 @@
+{
+  "dataset_name": "hard_negatives",
+  "description": "Similar-looking prompts that should NOT match to test precision",
+  "prompt_groups": [
+    {
+      "group_id": 1,
+      "topic": "Docker topics - should be different",
+      "expected_behavior": "should_not_match",
+      "prompts": [
+        "Explain Docker containers.",
+        "Explain Docker networking.",
+        "Explain Docker Compose.",
+        "Explain Docker volumes.",
+        "Explain Docker images."
+      ]
+    },
+    {
+      "group_id": 2,
+      "topic": "Python topics - should be different",
+      "expected_behavior": "should_not_match",
+      "prompts": [
+        "What are Python decorators?",
+        "What are Python generators?",
+        "What are Python list comprehensions?",
+        "What are Python classes?",
+        "What are Python modules?"
+      ]
+    },
+    {
+      "group_id": 3,
+      "topic": "Database types - should be different",
+      "expected_behavior": "should_not_match",
+      "prompts": [
+        "What is PostgreSQL?",
+        "What is MySQL?",
+        "What is MongoDB?",
+        "What is Redis?",
+        "What is SQLite?"
+      ]
+    },
+    {
+      "group_id": 4,
+      "topic": "AWS services - should be different",
+      "expected_behavior": "should_not_match",
+      "prompts": [
+        "What is AWS S3?",
+        "What is AWS EC2?",
+        "What is AWS Lambda?",
+        "What is AWS RDS?",
+        "What is AWS DynamoDB?"
+      ]
+    },
+    {
+      "group_id": 5,
+      "topic": "Machine learning algorithms - should be different",
+      "expected_behavior": "should_not_match",
+      "prompts": [
+        "Explain linear regression.",
+        "Explain logistic regression.",
+        "Explain decision trees.",
+        "Explain random forests.",
+        "Explain neural networks."
+      ]
+    },
+    {
+      "group_id": 6,
+      "topic": "HTTP methods - should be different",
+      "expected_behavior": "should_not_match",
+      "prompts": [
+        "What is HTTP GET?",
+        "What is HTTP POST?",
+        "What is HTTP PUT?",
+        "What is HTTP DELETE?",
+        "What is HTTP PATCH?"
+      ]
+    },
+    {
+      "group_id": 7,
+      "topic": "JavaScript frameworks - should be different",
+      "expected_behavior": "should_not_match",
+      "prompts": [
+        "What is React?",
+        "What is Vue.js?",
+        "What is Angular?",
+        "What is Svelte?",
+        "What is Next.js?"
+      ]
+    },
+    {
+      "group_id": 8,
+      "topic": "Git commands - should be different",
+      "expected_behavior": "should_not_match",
+      "prompts": [
+        "What does git commit do?",
+        "What does git push do?",
+        "What does git pull do?",
+        "What does git merge do?",
+        "What does git rebase do?"
+      ]
+    },
+    {
+      "group_id": 9,
+      "topic": "Security concepts - should be different",
+      "expected_behavior": "should_not_match",
+      "prompts": [
+        "What is encryption?",
+        "What is authentication?",
+        "What is authorization?",
+        "What is hashing?",
+        "What is a firewall?"
+      ]
+    },
+    {
+      "group_id": 10,
+      "topic": "Design patterns - should be different",
+      "expected_behavior": "should_not_match",
+      "prompts": [
+        "Explain the Singleton pattern.",
+        "Explain the Factory pattern.",
+        "Explain the Observer pattern.",
+        "Explain the Strategy pattern.",
+        "Explain the Adapter pattern."
+      ]
+    }
+  ]
+}

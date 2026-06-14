@@ -2,7 +2,7 @@
 Main API router
 """
 from fastapi import APIRouter
-from app.api.endpoints import chat, models, evaluation, metrics, drift, agents, supervisor
+from app.api.endpoints import chat, models, evaluation, metrics, drift, agents, supervisor, benchmark
 
 api_router = APIRouter()
 
@@ -24,6 +24,9 @@ api_router.include_router(agents.router, prefix="/agents", tags=["agents"])
 
 # Supervisor orchestration endpoints
 api_router.include_router(supervisor.router, prefix="/supervisor", tags=["supervisor"])
+
+# Benchmark endpoints
+api_router.include_router(benchmark.router, prefix="/benchmark", tags=["benchmark"])
 
 # API status endpoint
 @api_router.get("/status")

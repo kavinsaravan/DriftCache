@@ -1,0 +1,126 @@
+{
+  "dataset_name": "semantic_duplicates",
+  "description": "Semantically similar prompts with different wording to test semantic matching",
+  "prompt_groups": [
+    {
+      "group_id": 1,
+      "topic": "Docker explanation",
+      "expected_behavior": "should_match",
+      "prompts": [
+        "Explain Docker simply.",
+        "What is Docker in simple terms?",
+        "Give me a beginner explanation of Docker.",
+        "Can you describe what Docker does?",
+        "Docker for beginners - explain it to me."
+      ]
+    },
+    {
+      "group_id": 2,
+      "topic": "Python advantages",
+      "expected_behavior": "should_match",
+      "prompts": [
+        "What are the benefits of Python?",
+        "Why should I use Python?",
+        "What makes Python a good programming language?",
+        "Tell me the advantages of Python.",
+        "Why is Python popular?"
+      ]
+    },
+    {
+      "group_id": 3,
+      "topic": "Machine learning definition",
+      "expected_behavior": "should_match",
+      "prompts": [
+        "What is machine learning?",
+        "Define machine learning.",
+        "Explain machine learning to me.",
+        "What does machine learning mean?",
+        "Machine learning - what is it?"
+      ]
+    },
+    {
+      "group_id": 4,
+      "topic": "REST API explanation",
+      "expected_behavior": "should_match",
+      "prompts": [
+        "What is a REST API?",
+        "Explain REST APIs.",
+        "What does REST API mean?",
+        "Define RESTful API.",
+        "Tell me about REST APIs."
+      ]
+    },
+    {
+      "group_id": 5,
+      "topic": "Cloud computing benefits",
+      "expected_behavior": "should_match",
+      "prompts": [
+        "What are the advantages of cloud computing?",
+        "Why use cloud computing?",
+        "Benefits of the cloud?",
+        "What makes cloud computing useful?",
+        "Advantages of moving to the cloud?"
+      ]
+    },
+    {
+      "group_id": 6,
+      "topic": "Microservices architecture",
+      "expected_behavior": "should_match",
+      "prompts": [
+        "What is microservices architecture?",
+        "Explain microservices.",
+        "Define microservices architecture.",
+        "What are microservices?",
+        "Microservices - explain the concept."
+      ]
+    },
+    {
+      "group_id": 7,
+      "topic": "Database indexing",
+      "expected_behavior": "should_match",
+      "prompts": [
+        "What is database indexing?",
+        "Explain database indexes.",
+        "How do database indexes work?",
+        "What are indexes in databases?",
+        "Define database indexing."
+      ]
+    },
+    {
+      "group_id": 8,
+      "topic": "CI/CD explanation",
+      "expected_behavior": "should_match",
+      "prompts": [
+        "What is continuous integration?",
+        "Explain CI/CD.",
+        "What does CI/CD mean?",
+        "Define continuous integration and deployment.",
+        "Tell me about CI/CD pipelines."
+      ]
+    },
+    {
+      "group_id": 9,
+      "topic": "Redis usage",
+      "expected_behavior": "should_match",
+      "prompts": [
+        "What is Redis used for?",
+        "Why use Redis?",
+        "What are Redis use cases?",
+        "When should I use Redis?",
+        "Redis - what is it good for?"
+      ]
+    },
+    {
+      "group_id": 10,
+      "topic": "GraphQL explanation",
+      "expected_behavior": "should_match",
+      "prompts": [
+        "What is GraphQL?",
+        "Explain GraphQL.",
+        "Define GraphQL.",
+        "What does GraphQL do?",
+        "GraphQL - what is it?"
+      ]
+    }
+  ]
+}
