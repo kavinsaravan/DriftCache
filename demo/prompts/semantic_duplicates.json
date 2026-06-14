@@ -1,0 +1,61 @@
+{
+  "scenario": "semantic_cache_savings",
+  "description": "Demonstrates basic semantic caching with paraphrased questions",
+  "prompt_pairs": [
+    {
+      "id": 1,
+      "topic": "Redis",
+      "original": "Explain Redis simply.",
+      "variations": [
+        "What is Redis in simple terms?",
+        "Can you give me a beginner-friendly explanation of Redis?",
+        "Redis - explain it to me like I'm new to databases.",
+        "What does Redis do?"
+      ]
+    },
+    {
+      "id": 2,
+      "topic": "Docker",
+      "original": "What is Docker?",
+      "variations": [
+        "Explain Docker to me.",
+        "What does Docker do?",
+        "Docker - what is it?",
+        "Can you describe Docker in simple terms?"
+      ]
+    },
+    {
+      "id": 3,
+      "topic": "Microservices",
+      "original": "Explain microservices architecture.",
+      "variations": [
+        "What is microservices architecture?",
+        "Define microservices.",
+        "What are microservices?",
+        "Microservices - explain the concept."
+      ]
+    },
+    {
+      "id": 4,
+      "topic": "REST API",
+      "original": "What is a REST API?",
+      "variations": [
+        "Explain REST APIs.",
+        "What does REST API mean?",
+        "Define RESTful API.",
+        "REST API - what is it?"
+      ]
+    },
+    {
+      "id": 5,
+      "topic": "Kubernetes",
+      "original": "What is Kubernetes?",
+      "variations": [
+        "Explain Kubernetes.",
+        "What does Kubernetes do?",
+        "K8s - what is it?",
+        "Kubernetes for beginners."
+      ]
+    }
+  ]
+}

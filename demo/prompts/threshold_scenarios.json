@@ -1,0 +1,37 @@
+{
+  "scenario": "threshold_tradeoff",
+  "description": "Demonstrates the tradeoff between cache hit rate and precision at different thresholds",
+  "test_groups": [
+    {
+      "group_name": "clear_matches",
+      "description": "These should match at any reasonable threshold",
+      "prompts": [
+        "What is Python?",
+        "Explain Python.",
+        "What does Python mean?",
+        "Python - what is it?"
+      ]
+    },
+    {
+      "group_name": "moderate_similarity",
+      "description": "These are related but distinct - should match at low threshold, not at high",
+      "prompts": [
+        "What are the benefits of Python?",
+        "What are Python's disadvantages?",
+        "When should I use Python?",
+        "Is Python slow?"
+      ]
+    },
+    {
+      "group_name": "low_similarity",
+      "description": "These look related but are different topics - should NOT match",
+      "prompts": [
+        "What is Python the programming language?",
+        "What is Python the snake?",
+        "What is Monty Python?",
+        "What is pythonic code?"
+      ]
+    }
+  ],
+  "thresholds_to_test": [0.85, 0.90, 0.95]
+}

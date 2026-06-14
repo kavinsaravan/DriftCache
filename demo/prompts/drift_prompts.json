@@ -1,0 +1,49 @@
+{
+  "scenario": "drift_detection",
+  "description": "Demonstrates semantic drift when query patterns shift to different domains",
+  "baseline_prompts": {
+    "domain": "software_engineering",
+    "prompts": [
+      "Explain Docker containers.",
+      "What is continuous integration?",
+      "How do microservices work?",
+      "What is Kubernetes?",
+      "Explain REST APIs.",
+      "What is serverless computing?",
+      "How does load balancing work?",
+      "What is a database index?",
+      "Explain GraphQL.",
+      "What is Redis used for?"
+    ]
+  },
+  "drift_prompts": {
+    "domain": "healthcare_legal_finance",
+    "prompts": [
+      "What are HIPAA compliance requirements?",
+      "Explain medical billing codes.",
+      "What is patient confidentiality?",
+      "How does health insurance underwriting work?",
+      "What are the requirements for clinical trials?",
+      "Explain GDPR data privacy regulations.",
+      "What is SEC filing requirement for public companies?",
+      "How does mortgage underwriting work?",
+      "What are the tax implications of stock options?",
+      "Explain legal discovery process in litigation."
+    ]
+  },
+  "recovery_prompts": {
+    "domain": "software_engineering",
+    "prompts": [
+      "What is CI/CD?",
+      "Explain database transactions.",
+      "What is API rate limiting?",
+      "How does caching work?",
+      "What is OAuth 2.0?",
+      "Explain message queues.",
+      "What is event-driven architecture?",
+      "How do CDNs work?",
+      "What is database sharding?",
+      "Explain blue-green deployment."
+    ]
+  }
+}

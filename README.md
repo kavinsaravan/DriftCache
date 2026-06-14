@@ -230,6 +230,54 @@ npm run dev
 curl -X POST http://localhost:8000/supervisor/run
 ```
 
+## Demo Scenarios
+
+Run scripted demos that showcase DriftCache's key capabilities:
+
+```bash
+# Install demo dependencies
+pip install requests colorama
+
+# Seed cache with baseline data
+python demo/seed_cache.py
+
+# Run all demos
+python demo/run_demo.py --all
+
+# Run specific scenarios
+python demo/run_demo.py --scenario semantic      # Semantic caching
+python demo/run_demo.py --scenario threshold     # Threshold tradeoffs
+
+# Run autonomous infrastructure demos
+python demo/generate_drift.py drift              # Drift detection
+python demo/generate_drift.py optimization       # Auto threshold tuning
+python demo/generate_drift.py rebuild            # Index self-healing
+```
+
+### Demo Scenarios Overview
+
+**Scenario 1: Semantic Cache Savings**
+- Shows: Basic semantic caching with paraphrased questions
+- Example: "Explain Redis" → "What is Redis?" (cache HIT, 9ms vs 1,800ms)
+
+**Scenario 2: Threshold Tradeoff**
+- Shows: How threshold controls precision vs recall
+- Example: 0.85 (more hits, riskier) vs 0.95 (fewer hits, safer)
+
+**Scenario 3: Drift Detection**
+- Shows: Monitoring semantic distribution changes
+- Example: Software queries → Healthcare queries → Drift alert
+
+**Scenario 4: Autonomous Optimization**
+- Shows: Agent-based threshold tuning
+- Example: Drift detected → Supervisor runs → Threshold adjusted
+
+**Scenario 5: Index Rebuild**
+- Shows: Self-healing vector infrastructure
+- Example: Stale index (32%) → Auto rebuild → Healthy (0%)
+
+See [demo/README.md](demo/README.md) for detailed scenario descriptions.
+
 ## Benchmarking
 
 Run comprehensive benchmarks to measure performance:
