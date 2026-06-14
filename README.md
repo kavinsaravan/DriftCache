@@ -164,31 +164,58 @@ GET  /agents/stats
 
 ### Prerequisites
 
-- Python 3.9+
-- Node.js 16+
-- PostgreSQL 13+
-- Redis 6+
-- Anthropic API key
+- Docker and Docker Compose (recommended)
+- OR: Python 3.11+, Node.js 20+, PostgreSQL 15+, Redis 7+
+- OpenAI API key
 
-### Quick Start
+### Quick Start (Docker - Recommended)
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd DriftCache
+
+# Copy environment template
+cp .env.example .env
+
+# Edit .env and add your OpenAI API key
+# OPENAI_API_KEY=your_openai_api_key_here
+
+# Start all services
+docker compose up --build
+
+# Open dashboard
+open http://localhost
+```
+
+That's it! DriftCache is now running with:
+- Frontend at http://localhost
+- Backend API at http://localhost:8000
+- PostgreSQL on port 5432
+- Redis on port 6379
+
+### Manual Setup (Without Docker)
 
 ```bash
 # Backend
 cd backend
 pip install -r requirements.txt
-export ANTHROPIC_API_KEY="your-key"
-export DATABASE_URL="postgresql://user:pass@localhost/driftcache"
-export REDIS_URL="redis://localhost:6379"
+export OPENAI_API_KEY="your-key"
+export DATABASE_HOST="localhost"
+export DATABASE_USER="driftcache"
+export DATABASE_PASSWORD="driftcache_password"
+export DATABASE_NAME="driftcache"
+export REDIS_HOST="localhost"
 alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 
 # Frontend
 cd frontend
 npm install
-npm start
+npm run dev
 
 # Trigger autonomous workflow
-curl -X POST http://localhost:8000/agents/cache-maintenance/run
+curl -X POST http://localhost:8000/supervisor/run
 ```
 
 ## Key Metrics Tracked

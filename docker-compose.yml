@@ -3,39 +3,40 @@ version: '3.8'
 services:
   # PostgreSQL Database
   postgres:
-    image: postgres:16-alpine
+    image: postgres:15-alpine
     container_name: driftcache-postgres
     environment:
-      POSTGRES_USER: driftcache
-      POSTGRES_PASSWORD: driftcache_password
-      POSTGRES_DB: driftcache
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: ${DATABASE_NAME:-driftcache}
+      POSTGRES_USER: ${DATABASE_USER:-driftcache}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-driftcache_password}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    networks:
-      - driftcache-network
+    ports:
+      - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U driftcache"]
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-driftcache}"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - driftcache-network
 
   # Redis Cache
   redis:
     image: redis:7-alpine
     container_name: driftcache-redis
-    ports:
-      - "6379:6379"
+    command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
-    networks:
-      - driftcache-network
+    ports:
+      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
-      timeout: 5s
+      timeout: 3s
       retries: 5
+    networks:
+      - driftcache-network
 
   # Backend API
   backend:
@@ -44,44 +45,55 @@ services:
       dockerfile: Dockerfile
     container_name: driftcache-backend
     environment:
-      - POSTGRES_USER=driftcache
-      - POSTGRES_PASSWORD=driftcache_password
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_DB=driftcache
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_NAME: ${DATABASE_NAME:-driftcache}
+      DATABASE_USER: ${DATABASE_USER:-driftcache}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-driftcache_password}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: ${REDIS_DB:-0}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4}
+      DEFAULT_SIMILARITY_THRESHOLD: ${DEFAULT_SIMILARITY_THRESHOLD:-0.90}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app
+      - faiss_indices:/app/faiss_indices
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/status')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     networks:
       - driftcache-network
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-  # Frontend
+  # Frontend Web UI
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: driftcache-frontend
     ports:
-      - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
+      - "80:80"
     depends_on:
       - backend
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
     networks:
       - driftcache-network
-    environment:
-      - VITE_API_URL=http://localhost:8000
 
 networks:
   driftcache-network:
@@ -89,4 +101,8 @@ networks:
 
 volumes:
   postgres_data:
+    driver: local
   redis_data:
+    driver: local
+  faiss_indices:
+    driver: local
