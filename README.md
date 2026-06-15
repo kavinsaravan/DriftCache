@@ -25,6 +25,18 @@ Client Request → DriftCache API → [Redis + FAISS] → PostgreSQL
 
 **Tech Stack:** FastAPI, React, PostgreSQL, Redis, FAISS, LangChain, LangGraph, Docker
 
+## Technology Stack
+
+| Component | Technology |
+|-----------|------------|
+| Backend | FastAPI, Python 3.11, Pydantic |
+| Frontend | React, Recharts, Nginx |
+| Caching | Redis 7, PostgreSQL 15 |
+| Vector Search | FAISS, OpenAI embeddings |
+| LLM | OpenAI GPT-4/4o-mini |
+| AI Agents | LangChain 0.3+, LangGraph |
+| Infrastructure | Docker, Alembic |
+
 ## Quick Start
 
 ```bash
@@ -159,15 +171,3 @@ DriftCache/
 │   └── prompts/                     # Demo datasets
 └── docker-compose.yml
 ```
-
-## Technology Stack
-
-| Component | Technology |
-|-----------|------------|
-| Backend | FastAPI, Python 3.11, Pydantic |
-| Frontend | React, Recharts, Nginx |
-| Caching | Redis 7, PostgreSQL 15 |
-| Vector Search | FAISS, OpenAI embeddings |
-| LLM | OpenAI GPT-4/4o-mini |
-| AI Agents | LangChain 0.3+, LangGraph |
-| Infrastructure | Docker, Alembic |
