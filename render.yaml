@@ -1,0 +1,46 @@
+services:
+  # Main FastAPI Backend
+  - type: web
+    name: driftcache-api
+    runtime: python
+    region: oregon
+    plan: starter
+    buildCommand: cd backend && pip install -r requirements.txt
+    startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: driftcache-db
+          property: connectionString
+      - key: REDIS_HOST
+        fromService:
+          name: driftcache-redis
+          type: redis
+          property: host
+      - key: REDIS_PORT
+        fromService:
+          name: driftcache-redis
+          type: redis
+          property: port
+      - key: OPENAI_API_KEY
+        sync: false  # Set manually in Render dashboard
+      - key: PYTHON_VERSION
+        value: 3.11
+      - key: ENVIRONMENT
+        value: production
+    healthCheckPath: /health
+    autoDeploy: true
+
+databases:
+  # PostgreSQL Database
+  - name: driftcache-db
+    databaseName: driftcache
+    user: driftcache
+    plan: starter
+    region: oregon
+
+  # Redis Cache
+  - name: driftcache-redis
+    plan: starter
+    region: oregon
+    maxmemoryPolicy: allkeys-lru
