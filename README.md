@@ -23,7 +23,6 @@ Client Request → DriftCache API → [Redis + FAISS] → PostgreSQL
               - Index Rebuild
 ```
 
-**Tech Stack:** FastAPI, React, PostgreSQL, Redis, FAISS, LangChain, LangGraph, Docker
 
 ## Technology Stack
 
