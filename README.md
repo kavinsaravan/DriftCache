@@ -4,16 +4,6 @@
 
 Semantic caching proxy that reduces LLM provider calls by 68% using vector embeddings and FAISS, with autonomous agents that detect drift and optimize cache performance.
 
-## Performance Metrics
-
-Based on 1,000-request benchmark:
-
-- **68% cache hit rate** - Reduced LLM calls by over two-thirds
-- **15ms p95 cache latency** - 144x faster than provider calls (1,850ms p95)
-- **$11.72 estimated savings** - Per 1,000 requests (102,000 tokens saved)
-- **94% precision, 76% recall** - High quality semantic matching
-- **45 requests/second** - Production-ready throughput
-
 ## Key Features
 
 - **Semantic Caching** - OpenAI embeddings + FAISS vector search recognize paraphrased queries
@@ -92,6 +82,16 @@ python benchmarks/load_test.py
 # View results
 cat benchmarks/results/latest_benchmark.json
 ```
+
+## Performance Metrics
+
+Based on 1,000-request benchmark:
+
+- **68% cache hit rate** - Reduced LLM calls by over two-thirds
+- **15ms p95 cache latency** - 144x faster than provider calls (1,850ms p95)
+- **$11.72 estimated savings** - Per 1,000 requests (102,000 tokens saved)
+- **94% precision, 76% recall** - High quality semantic matching
+- **45 requests/second** - Production-ready throughput
 
 ## API Endpoints
 
