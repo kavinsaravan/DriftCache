@@ -2,7 +2,7 @@
 Main API router
 """
 from fastapi import APIRouter
-from app.api.endpoints import chat, models, evaluation, metrics, drift, agents, supervisor, benchmark
+from app.api.endpoints import chat, models, evaluation, metrics, drift, agents, supervisor, benchmark, vectorstore
 
 api_router = APIRouter()
 
@@ -27,6 +27,9 @@ api_router.include_router(supervisor.router, prefix="/supervisor", tags=["superv
 
 # Benchmark endpoints
 api_router.include_router(benchmark.router, prefix="/benchmark", tags=["benchmark"])
+
+# Vectorstore / FAISS index endpoints
+api_router.include_router(vectorstore.router, prefix="/vectorstore", tags=["vectorstore"])
 
 # API status endpoint
 @api_router.get("/status")

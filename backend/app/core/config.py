@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173"]
 
     # Database
+    DATABASE_URL: str = Field(default="sqlite:///./driftcache.db")
     POSTGRES_USER: str = Field(default="driftcache")
     POSTGRES_PASSWORD: str = Field(default="driftcache_password")
     POSTGRES_HOST: str = Field(default="localhost")
@@ -24,7 +25,10 @@ class Settings(BaseSettings):
     POSTGRES_DB: str = Field(default="driftcache")
 
     @property
-    def DATABASE_URL(self) -> str:
+    def DB_URL(self) -> str:
+        """Return DATABASE_URL if set, otherwise construct PostgreSQL URL"""
+        if self.DATABASE_URL and not self.DATABASE_URL.startswith("postgresql://"):
+            return self.DATABASE_URL
         return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
     # Redis

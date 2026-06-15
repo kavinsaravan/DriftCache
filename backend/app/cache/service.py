@@ -255,8 +255,10 @@ class CacheService:
         )
 
         # Store in Redis (online serving layer)
+        # IMPORTANT: Use prompt_hash as the key, not cache_id, so FAISS can find it
+        prompt_hash = embedding.metadata.prompt_hash
         await self.redis_store.set_cached_response(
-            cache_id=cache_id,
+            cache_id=prompt_hash,  # Use prompt_hash as key for FAISS lookup
             response=cached_response,
             ttl_seconds=ttl
         )
@@ -271,9 +273,12 @@ class CacheService:
             model_name=model_name
         )
 
+        # Persist FAISS index to disk so it survives restarts
+        self.search_service.save_index()
+
         logger.info(
             f"Stored response in cache: cache_id={cache_id[:8]}..., "
-            f"ttl={ttl}s, stored=[redis+legacy+faiss]"
+            f"ttl={ttl}s, stored=[redis+legacy+faiss+disk]"
         )
 
         return cache_id

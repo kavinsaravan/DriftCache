@@ -15,18 +15,23 @@ from fastapi.responses import StreamingResponse
 from app.models.schemas import (
     ChatCompletionRequest,
     ChatCompletionResponse,
+    ChatCompletionChoice,
+    Message,
+    UsageInfo,
     ErrorResponse,
     ErrorDetail,
 )
 from app.providers.router import provider_router
 from app.services.streaming import StreamCollector
+from app.services.cache_recorder import get_cache_recorder
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+cache_recorder = get_cache_recorder()
 
 
-@router.post("/chat/completions", response_model=Union[ChatCompletionResponse, StreamingResponse])
-async def create_chat_completion(request: ChatCompletionRequest):
+@router.post("/chat/completions", response_model=None)
+async def create_chat_completion(request: ChatCompletionRequest) -> Union[ChatCompletionResponse, StreamingResponse]:
     """
     OpenAI-compatible chat completion endpoint
 
@@ -104,7 +109,50 @@ async def create_chat_completion(request: ChatCompletionRequest):
 
         else:
             # NON-STREAMING MODE
-            # Simple case: just return the full response
+            # Check cache first (with database recording)
+            request_id, cache_result = await cache_recorder.check_and_record(
+                messages=request.messages,
+                model_name=request.model,
+                stream=False
+            )
+
+            if cache_result.is_hit():
+                # Cache hit - build response from cached data
+                logger.info(f"✓ CACHE HIT: similarity={cache_result.similarity:.3f}")
+                cached = cache_result.cached_response
+
+                # Build OpenAI-compatible response from cached data
+                response = ChatCompletionResponse(
+                    id=f"cached-{cached.cache_id[:8]}",
+                    object="chat.completion",
+                    created=int(cached.created_at.timestamp()),
+                    model=cached.model_name,
+                    choices=[
+                        ChatCompletionChoice(
+                            index=0,
+                            message=Message(
+                                role="assistant",
+                                content=cached.response_text
+                            ),
+                            finish_reason="stop"
+                        )
+                    ],
+                    usage=UsageInfo(
+                        prompt_tokens=0,
+                        completion_tokens=0,
+                        total_tokens=0
+                    )
+                )
+
+                # Add cache metadata
+                response_dict = response.model_dump()
+                response_dict["cache_hit"] = True
+                response_dict["similarity_score"] = cache_result.similarity
+
+                return response_dict
+
+            # Cache miss - call provider
+            logger.info(f"✗ CACHE MISS: {cache_result.reason}")
             response = await provider_router.chat_completion(
                 model=request.model,
                 messages=request.messages,
@@ -113,10 +161,25 @@ async def create_chat_completion(request: ChatCompletionRequest):
                 top_p=request.top_p,
             )
 
-            # TODO: Cache the response here (Week 2)
-            logger.info(f"Completion: {response.usage.total_tokens} tokens")
+            # Store response in cache + database for future requests
+            response_text = response.choices[0].message.content
+            await cache_recorder.store_and_record(
+                request_id=request_id,
+                messages=request.messages,
+                response_text=response_text,
+                model_name=request.model,
+                provider="openai",
+                input_tokens=response.usage.prompt_tokens if response.usage else None,
+                output_tokens=response.usage.completion_tokens if response.usage else None,
+                estimated_cost=None  # TODO: Calculate cost based on model pricing
+            )
+            logger.info(f"Stored in cache+DB: {response.usage.total_tokens if response.usage else 0} tokens")
 
-            return response
+            # Add cache metadata to response
+            response_dict = response.model_dump()
+            response_dict["cache_hit"] = False
+
+            return response_dict
 
     except HTTPException:
         raise

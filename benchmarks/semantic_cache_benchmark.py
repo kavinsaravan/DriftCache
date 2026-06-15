@@ -84,9 +84,9 @@ class DriftCacheBenchmark:
         with open(dataset_path, 'r') as f:
             return json.load(f)
     
-    def send_request(self, prompt: str, model: str = "gpt-4") -> Dict[str, Any]:
+    def send_request(self, prompt: str, model: str = "gpt-4o-mini") -> Dict[str, Any]:
         """Send request to DriftCache API"""
-        url = f"{self.api_base_url}/v1/chat/completions"
+        url = f"{self.api_base_url}/api/v1/chat/completions"
         payload = {
             "model": model,
             "messages": [{"role": "user", "content": prompt}],

@@ -247,7 +247,7 @@ class OptimizationPolicy:
             return False, "DRY RUN mode enabled - would deploy in production"
 
         # All checks passed
-        return True, f"Threshold change approved: {old_threshold} ’ {new_threshold} (score improvement: {improvement:.3f})"
+        return True, f"Threshold change approved: {old_threshold} -> {new_threshold} (score improvement: {improvement:.3f})"
 
     def _estimate_score(self, metrics: Dict[str, float]) -> float:
         """

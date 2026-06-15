@@ -53,7 +53,7 @@ def run_supervisor_workflow(
             {
                 "agent": "threshold_optimizer",
                 "action": "optimize_threshold",
-                "result_summary": "Threshold: 0.90 ’ 0.93"
+                "result_summary": "Threshold: 0.90 -> 0.93"
             }
         ],
         "validation": {

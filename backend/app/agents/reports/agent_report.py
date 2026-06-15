@@ -86,7 +86,7 @@ class AgentReportFormatter:
         if degradations:
             report.append("Concerns:")
             for deg in degradations:
-                report.append(f"    {deg}")
+                report.append(f"  -> {deg}")
         report.append("")
 
         # Final State
@@ -111,7 +111,7 @@ class AgentReportFormatter:
             report.append("RECOMMENDATIONS")
             report.append("-" * 80)
             for rec in recommendations:
-                report.append(f"" {rec}")
+                report.append(f"  - {rec}")
             report.append("")
 
         report.append("=" * 80)
@@ -133,4 +133,4 @@ class AgentReportFormatter:
         final_status = supervisor_result.get('final_status')
         actions_count = len(supervisor_result.get('actions_taken', []))
 
-        return f"{diagnosis} ’ {actions_count} action(s) ’ {final_status}"
+        return f"{diagnosis} -> {actions_count} action(s) -> {final_status}"

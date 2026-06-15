@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from app.models.index_version import IndexVersion
-from app.database.session import get_db_session
+from app.database.session import get_db_manager
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ class IndexManager:
         Returns:
             Active IndexVersion or None
         """
-        with get_db_session() as session:
+        with get_db_manager() as session:
             version = session.query(IndexVersion).filter(
                 IndexVersion.is_active == True,
                 IndexVersion.tenant_id == tenant_id
@@ -80,7 +80,7 @@ class IndexManager:
         Returns:
             Created IndexVersion
         """
-        with get_db_session() as session:
+        with get_db_manager() as session:
             now = datetime.utcnow()
 
             new_version = IndexVersion(
@@ -121,7 +121,7 @@ class IndexManager:
         Returns:
             Success status
         """
-        with get_db_session() as session:
+        with get_db_manager() as session:
             # Deactivate current active version
             current_active = session.query(IndexVersion).filter(
                 IndexVersion.is_active == True,
@@ -165,7 +165,7 @@ class IndexManager:
         Returns:
             Rollback version or None
         """
-        with get_db_session() as session:
+        with get_db_manager() as session:
             # Get most recent non-active version
             previous_version = session.query(IndexVersion).filter(
                 IndexVersion.is_active == False,
@@ -223,7 +223,7 @@ class IndexManager:
         Returns:
             List of index version summaries
         """
-        with get_db_session() as session:
+        with get_db_manager() as session:
             query = session.query(IndexVersion)
 
             if tenant_id:

@@ -11,7 +11,7 @@ from app.vectorstore.index_health import IndexHealthMonitor
 from app.vectorstore.index_manager import IndexManager
 from app.vectorstore.rebuild import IndexRebuilder
 from app.models.index_rebuild_job import IndexRebuildJob
-from app.database.session import get_db_session
+from app.database.session import get_db_manager
 
 logger = logging.getLogger(__name__)
 
@@ -28,10 +28,10 @@ class IndexRebuildAgent:
     5. Record maintenance history
 
     Decision priorities:
-    - High stale ratio (>25%) ’ Rebuild urgently
-    - High latency (>40ms) ’ Rebuild for performance
-    - Old index + moderate staleness ’ Rebuild proactively
-    - Threshold optimization failed ’ Rebuild for quality
+    - High stale ratio (>25%) -> Rebuild urgently
+    - High latency (>40ms) -> Rebuild for performance
+    - Old index + moderate staleness -> Rebuild proactively
+    - Threshold optimization failed -> Rebuild for quality
     """
 
     def __init__(
@@ -188,7 +188,7 @@ class IndexRebuildAgent:
         )
 
         # Store rebuild job in database
-        with get_db_session() as session:
+        with get_db_manager().session_scope() as session:
             rebuild_job = IndexRebuildJob(
                 job_id=rebuild_result.get("rebuild_id"),
                 status="simulated" if self.dry_run else rebuild_result.get("status", "completed"),
@@ -234,7 +234,7 @@ class IndexRebuildAgent:
         Returns:
             List of rebuild job summaries
         """
-        with get_db_session() as session:
+        with get_db_manager().session_scope() as session:
             query = session.query(IndexRebuildJob)
 
             if tenant_id:

@@ -16,7 +16,7 @@ from app.agents.tools.drift_tools import DriftAnalysisTool
 from app.agents.tools.cache_tools import CacheQualityTool
 from app.agents.tools.metrics_tools import MetricsSummaryTool
 from app.models.supervisor_run import SupervisorRun
-from app.database.session import get_db_session
+from app.database.session import get_db_manager
 
 logger = logging.getLogger(__name__)
 
@@ -233,7 +233,7 @@ class SupervisorAgent:
                 "action": "optimize_threshold",
                 "reason": action["reason"],
                 "result": result,
-                "result_summary": f"Threshold: {result.get('old_threshold')} ’ {result.get('new_threshold')}"
+                "result_summary": f"Threshold: {result.get('old_threshold')} -> {result.get('new_threshold')}"
             }
 
         elif agent == "index_rebuilder":
@@ -345,7 +345,7 @@ class SupervisorAgent:
 
     def _store_supervisor_run(self, result: Dict[str, Any]):
         """Store supervisor run in database"""
-        with get_db_session() as session:
+        with get_db_manager().session_scope() as session:
             supervisor_run = SupervisorRun(
                 run_id=result["run_id"],
                 trigger_source=result["trigger_source"],

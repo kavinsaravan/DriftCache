@@ -65,7 +65,7 @@ class ProviderRouter:
         Select the appropriate provider for a given model
 
         Routing logic:
-        1. Check model prefix (gpt- → OpenAI, claude- → Anthropic, etc.)
+        1. Check model prefix (gpt- -> OpenAI, claude- -> Anthropic, etc.)
         2. Fall back to checking each provider's supports_model()
         3. Return None if no provider supports the model
 

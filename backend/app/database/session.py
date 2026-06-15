@@ -7,7 +7,7 @@ import logging
 from typing import Generator, Optional
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import QueuePool
 
@@ -40,15 +40,26 @@ class DatabaseManager:
             return
 
         try:
-            # Create engine with connection pooling
-            self.engine = create_engine(
-                settings.DATABASE_URL,
-                poolclass=QueuePool,
-                pool_size=10,
-                max_overflow=20,
-                pool_pre_ping=True,  # Verify connections before using
-                echo=False,  # Set to True for SQL query logging
-            )
+            # Get database URL (supports SQLite or PostgreSQL)
+            db_url = getattr(settings, 'DB_URL', settings.DATABASE_URL)
+
+            # SQLite requires different engine configuration
+            if db_url.startswith('sqlite'):
+                self.engine = create_engine(
+                    db_url,
+                    connect_args={"check_same_thread": False},  # Required for SQLite
+                    echo=False,
+                )
+            else:
+                # PostgreSQL with connection pooling
+                self.engine = create_engine(
+                    db_url,
+                    poolclass=QueuePool,
+                    pool_size=10,
+                    max_overflow=20,
+                    pool_pre_ping=True,
+                    echo=False,
+                )
 
             # Add connection event listeners
             @event.listens_for(self.engine, "connect")
@@ -63,9 +74,12 @@ class DatabaseManager:
             )
 
             self._initialized = True
-            logger.info(
-                f"Database initialized: {settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
-            )
+            if db_url.startswith('sqlite'):
+                logger.info(f"Database initialized: SQLite ({db_url})")
+            else:
+                logger.info(
+                    f"Database initialized: {settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
+                )
 
         except Exception as e:
             logger.error(f"Failed to initialize database: {e}")
@@ -144,7 +158,7 @@ class DatabaseManager:
 
         try:
             with self.session_scope() as session:
-                session.execute("SELECT 1")
+                session.execute(text("SELECT 1"))
             return True
         except Exception as e:
             logger.error(f"Database health check failed: {e}")

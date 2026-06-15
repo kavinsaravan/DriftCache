@@ -172,7 +172,7 @@ class CacheDecisionEngine:
         # Otherwise, allow reuse (Week 2 MVP behavior)
         # Later: Add smarter compatibility logic
         #   - gpt-4 can reuse gpt-4-turbo responses
-        #   - But not gpt-3.5 → gpt-4
+        #   - But not gpt-3.5 -> gpt-4
         return True
 
     def _check_system_prompt_compatibility(
@@ -188,7 +188,7 @@ class CacheDecisionEngine:
         Example:
         - "You are a legal assistant"
         - "You are a funny comedian"
-        → Should NOT reuse cache
+        -> Should NOT reuse cache
 
         Args:
             cached_system: System prompt from cached response
@@ -201,15 +201,15 @@ class CacheDecisionEngine:
         if not self.config.include_system_prompt:
             return True
 
-        # Both None → compatible
+        # Both None -> compatible
         if cached_system is None and requested_system is None:
             return True
 
-        # One None, one not → incompatible
+        # One None, one not -> incompatible
         if (cached_system is None) != (requested_system is None):
             return False
 
-        # Both exist → must match exactly
+        # Both exist -> must match exactly
         return cached_system == requested_system
 
     def _check_tenant(self, cached_tenant: str, requested_tenant: str) -> bool:
@@ -277,7 +277,7 @@ class CacheDecisionEngine:
                 f"< threshold {self.config.similarity_threshold}"
             )
 
-        # ALL checks passed → CACHE HIT!
+        # ALL checks passed -> CACHE HIT!
         return (
             CacheDecision.HIT,
             f"Cache hit with similarity {similarity:.3f if similarity else 0}"
