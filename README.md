@@ -6,9 +6,9 @@ Semantic caching proxy that reduces LLM provider calls by 68% using vector embed
 
 ## Key Features
 
-- **Semantic Caching** - OpenAI embeddings + FAISS vector search recognize paraphrased queries
+- **Semantic Caching** - OpenAI embeddings + FAISS vector search to recognize paraphrased queries
 - **Autonomous Optimization** - LangGraph agents detect drift and auto-tune similarity thresholds
-- **Self-Healing Infrastructure** - Automatic index rebuilds when degradation detected
+- **Self-Healing Infrastructure** - Automatic index rebuilds when degradation is detected
 - **Production Ready** - Docker deployment, health checks, zero-downtime migrations
 - **OpenAI-Compatible API** - Drop-in replacement for existing integrations
 
