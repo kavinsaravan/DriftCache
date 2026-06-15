@@ -104,33 +104,62 @@ curl -X POST https://driftcache-api.onrender.com/api/v1/chat/completions \
 
 ---
 
-## Part 2: Deploy Frontend to Vercel (Coming Soon)
+## Part 2: Deploy Frontend to Vercel
 
 ### Prerequisites
 
 - Vercel account (free tier available at https://vercel.com)
-- Frontend application in the repository
+- Backend deployed on Render (from Part 1)
 
 ### Step 1: Connect Repository to Vercel
 
 1. Go to https://vercel.com/new
-2. Import your `DriftCache` repository
-3. Vercel will auto-detect framework settings
+2. Click **Import Git Repository**
+3. Select your `DriftCache` repository from GitHub
+4. Vercel will detect it as a monorepo
 
-### Step 2: Configure Environment Variables
+### Step 2: Configure Project Settings
 
-Add the backend API URL:
+**Important**: Since this is a monorepo, configure the following:
+
+- **Framework Preset**: Vite
+- **Root Directory**: `frontend` (click "Edit" and select the frontend folder)
+- **Build Command**: `npm run build`
+- **Output Directory**: `dist`
+- **Install Command**: `npm install`
+
+### Step 3: Configure Environment Variables
+
+Add the backend API URL in the Environment Variables section:
 
 ```
-NEXT_PUBLIC_API_URL=https://driftcache-api.onrender.com
+VITE_API_URL=https://driftcache-api.onrender.com
 ```
 
-### Step 3: Deploy
+**Note**: Your backend URL should be the one provided by Render (check your Render dashboard).
+
+### Step 4: Deploy
 
 Click **Deploy** and Vercel will:
-- Build your frontend
+- Install dependencies from `frontend/package.json`
+- Build your Vite + React app
 - Deploy to global CDN
 - Provide a production URL: `https://your-app.vercel.app`
+
+### Step 5: Update Backend CORS
+
+After deployment, update your backend's CORS settings to allow your Vercel domain:
+
+1. Go to Render Dashboard → `driftcache-api` → Environment
+2. The CORS is already configured to allow `https://*.vercel.app`
+3. No changes needed - Vercel domains are pre-configured!
+
+### Step 6: Verify Deployment
+
+Visit your Vercel URL and verify:
+- Frontend loads successfully
+- Can connect to backend API
+- Dashboard displays metrics from the backend
 
 ---
 
