@@ -4,7 +4,7 @@ services:
     name: driftcache-api
     runtime: python
     region: oregon
-    plan: starter
+    plan: free
     buildCommand: cd backend && pip install -r requirements.txt
     startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
@@ -30,7 +30,7 @@ databases:
   - name: driftcache-db
     databaseName: driftcache
     user: driftcache
-    plan: starter
+    plan: free
     region: oregon
 
 # Redis is configured as a separate service type, not a database
