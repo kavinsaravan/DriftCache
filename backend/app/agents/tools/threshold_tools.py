@@ -79,12 +79,12 @@ class UpdateThresholdTool(BaseTool):
     Updates the active similarity threshold.
 
     Use cases:
-    - Increase threshold (e.g., 0.90 → 0.92) when:
+    - Increase threshold (e.g., 0.90 -> 0.92) when:
       * False hit rate is too high (>0.10)
       * Precision needs improvement
       * Cache serving wrong answers
 
-    - Decrease threshold (e.g., 0.90 → 0.88) when:
+    - Decrease threshold (e.g., 0.90 -> 0.88) when:
       * False miss rate is too high (>0.40)
       * Recall needs improvement
       * Missing cost savings with good precision

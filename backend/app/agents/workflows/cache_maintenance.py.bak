@@ -1,0 +1,467 @@
+"""
+Cache Maintenance Agent Workflow
+
+LangGraph workflow for autonomous cache optimization
+"""
+from typing import Dict, Any
+import uuid
+import logging
+from datetime import datetime
+
+from app.agents.state import AgentState, WorkflowStatus, ActionDecision, DriftSeverity
+from app.agents.tools.drift_tools import DriftAnalysisTool, DriftStatusTool
+from app.agents.tools.cache_tools import CacheQualityTool
+from app.agents.tools.metrics_tools import MetricsSummaryTool, LatencyMetricsTool
+from app.agents.tools.threshold_tools import GetThresholdTool, UpdateThresholdTool
+from app.agents.tools.index_tools import IndexStatusTool, TriggerIndexRebuildTool
+from app.models.agent_action import AgentAction
+from app.database.session import get_db_manager
+
+logger = logging.getLogger(__name__)
+
+
+class CacheMaintenanceWorkflow:
+    """
+    Autonomous cache maintenance workflow
+
+    Flow: Load State -> Analyze Drift -> Analyze Quality -> Decide -> Execute -> Validate -> Report
+    """
+
+    def __init__(self):
+        # Initialize tools
+        self.drift_tool = DriftAnalysisTool()
+        self.drift_status_tool = DriftStatusTool()
+        self.quality_tool = CacheQualityTool()
+        self.metrics_tool = MetricsSummaryTool()
+        self.latency_tool = LatencyMetricsTool()
+        self.get_threshold_tool = GetThresholdTool()
+        self.update_threshold_tool = UpdateThresholdTool()
+        self.index_status_tool = IndexStatusTool()
+        self.index_rebuild_tool = TriggerIndexRebuildTool()
+
+    def create_initial_state(self, trigger_type: str = "manual", tenant_id: str = None) -> AgentState:
+        """Create initial workflow state"""
+        workflow_id = f"workflow_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+        return AgentState(
+            workflow_id=workflow_id,
+            trigger_type=trigger_type,
+            tenant_id=tenant_id
+        )
+
+    def load_system_state(self, state: AgentState) -> AgentState:
+        """
+        Node 1: Load System State
+
+        Collects current platform state from tools
+        """
+        logger.info(f"[{state.workflow_id}] Loading system state")
+        state.workflow_status = WorkflowStatus.ANALYZING
+
+        try:
+            # Get metrics summary
+            metrics_result = self.metrics_tool._run(period="24h", tenant_id=state.tenant_id)
+            if metrics_result.get("status") == "success":
+                state.metrics = metrics_result
+            else:
+                state.add_error(f"Failed to load metrics: {metrics_result.get('error')}")
+                return state
+
+            # Get current threshold
+            threshold_result = self.get_threshold_tool._run(tenant_id=state.tenant_id)
+            if threshold_result.get("status") == "success":
+                state.current_threshold = threshold_result["current_threshold"]
+            else:
+                state.add_warning("Could not get current threshold, using default 0.90")
+                state.current_threshold = 0.90
+
+            # Get index status
+            index_result = self.index_status_tool._run(tenant_id=state.tenant_id)
+            if index_result.get("status") == "success":
+                state.index_status = index_result
+
+            # Get latency metrics
+            latency_result = self.latency_tool._run(period="24h", tenant_id=state.tenant_id)
+            if latency_result.get("status") == "success":
+                state.latency_metrics = latency_result
+
+            logger.info(f"[{state.workflow_id}] System state loaded successfully")
+
+        except Exception as e:
+            logger.error(f"[{state.workflow_id}] Failed to load system state: {e}")
+            state.add_error(f"System state loading failed: {str(e)}")
+
+        return state
+
+    def analyze_drift(self, state: AgentState) -> AgentState:
+        """
+        Node 2: Analyze Drift
+
+        Determines drift severity
+        """
+        logger.info(f"[{state.workflow_id}] Analyzing drift")
+
+        try:
+            drift_result = self.drift_tool._run(tenant_id=state.tenant_id)
+
+            if drift_result.get("status") in ["success", "simulated"]:
+                state.drift_analysis = drift_result
+
+                # Classify drift severity
+                drift_score = drift_result.get("drift_score", 0)
+                if drift_score < 0.3:
+                    state.drift_severity = DriftSeverity.NO_DRIFT
+                elif drift_score < 0.6:
+                    state.drift_severity = DriftSeverity.MODERATE_DRIFT
+                else:
+                    state.drift_severity = DriftSeverity.HIGH_DRIFT
+
+                logger.info(
+                    f"[{state.workflow_id}] Drift analysis complete: "
+                    f"score={drift_score:.3f}, severity={state.drift_severity.value}"
+                )
+            else:
+                state.add_warning(f"Drift analysis incomplete: {drift_result.get('error')}")
+                state.drift_severity = DriftSeverity.NO_DRIFT  # Conservative default
+
+        except Exception as e:
+            logger.error(f"[{state.workflow_id}] Drift analysis failed: {e}")
+            state.add_error(f"Drift analysis failed: {str(e)}")
+
+        return state
+
+    def analyze_cache_quality(self, state: AgentState) -> AgentState:
+        """
+        Node 3: Analyze Cache Quality
+
+        Evaluates cache performance
+        """
+        logger.info(f"[{state.workflow_id}] Analyzing cache quality")
+
+        try:
+            quality_result = self.quality_tool._run(
+                dataset_name="default",
+                threshold=state.current_threshold or 0.90,
+                tenant_id=state.tenant_id
+            )
+
+            if quality_result.get("status") == "success":
+                state.cache_quality = quality_result
+                state.precision = quality_result.get("precision")
+                state.recall = quality_result.get("recall")
+                state.false_hit_rate = quality_result.get("false_hit_rate")
+                state.false_miss_rate = quality_result.get("false_miss_rate")
+
+                # Determine if quality is acceptable
+                # Quality is acceptable if:
+                # - Precision > 0.90 (safe)
+                # - False hit rate < 0.10 (not serving wrong answers)
+                # - F1 score > 0.70 (balanced)
+                state.quality_acceptable = (
+                    state.precision > 0.90 and
+                    state.false_hit_rate < 0.10 and
+                    quality_result.get("f1_score", 0) > 0.70
+                )
+
+                logger.info(
+                    f"[{state.workflow_id}] Quality analysis complete: "
+                    f"precision={state.precision:.3f}, recall={state.recall:.3f}, "
+                    f"acceptable={state.quality_acceptable}"
+                )
+            else:
+                state.add_error(f"Cache quality analysis failed: {quality_result.get('error')}")
+
+        except Exception as e:
+            logger.error(f"[{state.workflow_id}] Cache quality analysis failed: {e}")
+            state.add_error(f"Cache quality analysis failed: {str(e)}")
+
+        return state
+
+    def decide_action(self, state: AgentState) -> AgentState:
+        """
+        Node 4: Decide Action
+
+        Chooses what action to take based on analysis
+        """
+        logger.info(f"[{state.workflow_id}] Deciding action")
+        state.workflow_status = WorkflowStatus.DECIDING
+
+        try:
+            # Decision logic
+            decision = ActionDecision.NO_ACTION
+            reason = "System healthy, no action needed"
+            confidence = 0.5
+
+            # Priority 1: High false hit rate (dangerous)
+            if state.false_hit_rate and state.false_hit_rate > 0.10:
+                decision = ActionDecision.RAISE_THRESHOLD
+                reason = f"High false hit rate ({state.false_hit_rate:.1%}) is dangerous"
+                confidence = min(state.false_hit_rate * 2, 1.0)
+
+            # Priority 2: High drift with quality degradation
+            elif (state.drift_severity == DriftSeverity.HIGH_DRIFT and
+                  not state.quality_acceptable):
+                if state.precision and state.precision < 0.90:
+                    decision = ActionDecision.RAISE_THRESHOLD
+                    reason = f"High drift ({state.drift_analysis.get('drift_score'):.2f}) with low precision"
+                    confidence = 0.8
+                else:
+                    decision = ActionDecision.SCHEDULE_INDEX_REBUILD
+                    reason = f"High drift ({state.drift_analysis.get('drift_score'):.2f}) affecting performance"
+                    confidence = 0.7
+
+            # Priority 3: Missing savings opportunity
+            elif (state.false_miss_rate and state.false_miss_rate > 0.40 and
+                  state.false_hit_rate and state.false_hit_rate < 0.05):
+                decision = ActionDecision.LOWER_THRESHOLD
+                reason = f"High false miss rate ({state.false_miss_rate:.1%}) missing savings"
+                confidence = min(state.false_miss_rate, 1.0)
+
+            # Priority 4: Index degradation
+            elif (state.latency_metrics and
+                  state.latency_metrics.get("speedup_factor", 100) < 5):
+                decision = ActionDecision.SCHEDULE_INDEX_REBUILD
+                reason = "Low speedup factor indicates index degradation"
+                confidence = 0.6
+
+            # No action needed - system healthy
+            else:
+                if state.quality_acceptable:
+                    reason = (
+                        f"System healthy: precision={state.precision:.2f}, "
+                        f"recall={state.recall:.2f}, "
+                        f"drift={state.drift_severity.value}"
+                    )
+                    confidence = 0.9
+
+            state.decision = decision
+            state.decision_reason = reason
+            state.decision_confidence = confidence
+
+            logger.info(
+                f"[{state.workflow_id}] Decision made: {decision.value} "
+                f"(confidence={confidence:.2f})"
+            )
+
+        except Exception as e:
+            logger.error(f"[{state.workflow_id}] Decision making failed: {e}")
+            state.add_error(f"Decision making failed: {str(e)}")
+            state.decision = ActionDecision.NO_ACTION
+            state.decision_reason = f"Error in decision making: {str(e)}"
+
+        return state
+
+    def execute_action(self, state: AgentState) -> AgentState:
+        """
+        Node 5: Execute Action
+
+        Calls appropriate tool to execute decision
+        """
+        logger.info(f"[{state.workflow_id}] Executing action: {state.decision.value}")
+        state.workflow_status = WorkflowStatus.EXECUTING
+
+        try:
+            if state.decision == ActionDecision.NO_ACTION:
+                state.action_taken = "none"
+                state.action_result = {"message": "No action required"}
+
+            elif state.decision == ActionDecision.RAISE_THRESHOLD:
+                state.old_threshold = state.current_threshold
+                state.new_threshold = min(state.current_threshold + 0.02, 0.98)
+
+                result = self.update_threshold_tool._run(
+                    new_threshold=state.new_threshold,
+                    reason=state.decision_reason,
+                    dry_run=True,  # Week 6: Simulation mode
+                    tenant_id=state.tenant_id
+                )
+
+                state.action_taken = f"threshold_update_{state.old_threshold}_to_{state.new_threshold}"
+                state.action_result = result
+
+            elif state.decision == ActionDecision.LOWER_THRESHOLD:
+                state.old_threshold = state.current_threshold
+                state.new_threshold = max(state.current_threshold - 0.02, 0.75)
+
+                result = self.update_threshold_tool._run(
+                    new_threshold=state.new_threshold,
+                    reason=state.decision_reason,
+                    dry_run=True,  # Week 6: Simulation mode
+                    tenant_id=state.tenant_id
+                )
+
+                state.action_taken = f"threshold_update_{state.old_threshold}_to_{state.new_threshold}"
+                state.action_result = result
+
+            elif state.decision == ActionDecision.SCHEDULE_INDEX_REBUILD:
+                result = self.index_rebuild_tool._run(
+                    reason=state.decision_reason,
+                    priority="normal",
+                    dry_run=True,  # Week 6: Simulation mode
+                    tenant_id=state.tenant_id
+                )
+
+                state.action_taken = "index_rebuild_scheduled"
+                state.action_result = result
+
+            logger.info(f"[{state.workflow_id}] Action executed: {state.action_taken}")
+
+        except Exception as e:
+            logger.error(f"[{state.workflow_id}] Action execution failed: {e}")
+            state.add_error(f"Action execution failed: {str(e)}")
+
+        return state
+
+    def validate_result(self, state: AgentState) -> AgentState:
+        """
+        Node 6: Validate Result
+
+        Checks if action improved metrics (simulation for Week 6)
+        """
+        logger.info(f"[{state.workflow_id}] Validating result")
+        state.workflow_status = WorkflowStatus.VALIDATING
+
+        try:
+            if state.decision == ActionDecision.NO_ACTION:
+                state.validation_passed = True
+                state.validation_summary = "No validation needed"
+                state.validation_result = {"status": "skipped"}
+
+            elif state.action_result and state.action_result.get("status") == "simulated":
+                # Week 6: Use simulation estimates
+                estimated_impact = state.action_result.get("estimated_impact", {})
+
+                state.validation_passed = True  # Simulation always "passes"
+                state.validation_summary = (
+                    f"Simulated impact: {estimated_impact.get('precision_change', 'N/A')} precision, "
+                    f"{estimated_impact.get('recall_change', 'N/A')} recall"
+                )
+                state.validation_result = {
+                    "status": "simulated",
+                    "estimated_impact": estimated_impact
+                }
+
+            else:
+                state.validation_passed = False
+                state.validation_summary = "Action execution incomplete"
+
+            logger.info(
+                f"[{state.workflow_id}] Validation complete: "
+                f"passed={state.validation_passed}"
+            )
+
+        except Exception as e:
+            logger.error(f"[{state.workflow_id}] Validation failed: {e}")
+            state.add_error(f"Validation failed: {str(e)}")
+            state.validation_passed = False
+
+        return state
+
+    def write_agent_report(self, state: AgentState) -> AgentState:
+        """
+        Node 7: Write Agent Report
+
+        Stores action in database for auditability
+        """
+        logger.info(f"[{state.workflow_id}] Writing agent report")
+
+        try:
+            # Calculate execution time
+            state.completed_at = datetime.utcnow()
+            state.execution_time_ms = (
+                (state.completed_at - state.started_at).total_seconds() * 1000
+            )
+
+            # Set final status
+            if state.errors:
+                state.workflow_status = WorkflowStatus.FAILED
+            else:
+                state.workflow_status = WorkflowStatus.COMPLETED
+
+            # Create database record
+            with get_db_manager() as session:
+                agent_action = AgentAction(
+                    workflow_id=state.workflow_id,
+                    workflow_status=state.workflow_status.value,
+                    trigger_type=state.trigger_type,
+                    execution_time_ms=state.execution_time_ms,
+                    current_threshold=state.current_threshold,
+                    cache_hit_rate=state.metrics.get("cache_hit_rate") if state.metrics else None,
+                    precision=state.precision,
+                    recall=state.recall,
+                    false_hit_rate=state.false_hit_rate,
+                    false_miss_rate=state.false_miss_rate,
+                    drift_severity=state.drift_severity.value if state.drift_severity else None,
+                    drift_score=state.drift_analysis.get("drift_score") if state.drift_analysis else None,
+                    quality_acceptable=state.quality_acceptable,
+                    decision=state.decision.value if state.decision else None,
+                    decision_reason=state.decision_reason,
+                    decision_confidence=state.decision_confidence,
+                    action_taken=state.action_taken,
+                    old_threshold=state.old_threshold,
+                    new_threshold=state.new_threshold,
+                    action_result=state.action_result,
+                    validation_passed=state.validation_passed,
+                    validation_summary=state.validation_summary,
+                    validation_result=state.validation_result,
+                    report_summary=state.get_summary(),
+                    errors=state.errors if state.errors else None,
+                    warnings=state.warnings if state.warnings else None,
+                    tenant_id=state.tenant_id,
+                    started_at=state.started_at,
+                    completed_at=state.completed_at
+                )
+
+                session.add(agent_action)
+                session.commit()
+                session.refresh(agent_action)
+
+                state.agent_report_id = agent_action.id
+                state.report_summary = state.get_summary()
+
+            logger.info(
+                f"[{state.workflow_id}] Report written: "
+                f"id={state.agent_report_id}, status={state.workflow_status.value}"
+            )
+
+        except Exception as e:
+            logger.error(f"[{state.workflow_id}] Failed to write report: {e}")
+            state.add_error(f"Report writing failed: {str(e)}")
+
+        return state
+
+    def run(self, trigger_type: str = "manual", tenant_id: str = None) -> AgentState:
+        """
+        Run complete workflow
+
+        This is the main entry point for the agent
+        """
+        # Create initial state
+        state = self.create_initial_state(trigger_type, tenant_id)
+
+        logger.info(f"Starting cache maintenance workflow: {state.workflow_id}")
+
+        # Execute workflow nodes in sequence
+        state = self.load_system_state(state)
+        if state.workflow_status == WorkflowStatus.FAILED:
+            return self.write_agent_report(state)
+
+        state = self.analyze_drift(state)
+        if state.workflow_status == WorkflowStatus.FAILED:
+            return self.write_agent_report(state)
+
+        state = self.analyze_cache_quality(state)
+        if state.workflow_status == WorkflowStatus.FAILED:
+            return self.write_agent_report(state)
+
+        state = self.decide_action(state)
+        state = self.execute_action(state)
+        state = self.validate_result(state)
+        state = self.write_agent_report(state)
+
+        logger.info(
+            f"Workflow {state.workflow_id} completed: "
+            f"status={state.workflow_status.value}, "
+            f"decision={state.decision.value if state.decision else 'none'}"
+        )
+
+        return state

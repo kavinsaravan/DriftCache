@@ -234,7 +234,7 @@ class CacheRepository:
         self.session.commit()
         self.session.refresh(record)
 
-        logger.debug(f"Created embedding record: FAISS ID {faiss_vector_id} → cache {cache_id}")
+        logger.debug(f"Created embedding record: FAISS ID {faiss_vector_id} -> cache {cache_id}")
         return record
 
     def get_embedding_by_faiss_id(self, faiss_vector_id: int) -> Optional[EmbeddingRecord]:

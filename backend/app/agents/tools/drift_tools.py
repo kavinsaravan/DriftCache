@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 import logging
 
 from app.drift.service import get_drift_service
-from app.database.session import get_db_session
+from app.database.session import get_db_manager
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ class DriftAnalysisTool(BaseTool):
         try:
             logger.info(f"Running drift analysis for tenant_id={tenant_id}")
 
-            with get_db_session() as session:
+            with get_db_manager().session_scope() as session:
                 with get_drift_service(session=session) as service:
                     # Try to get latest drift alert first
                     latest_alert = service.get_latest_drift_alert(tenant_id=tenant_id)
@@ -129,7 +129,7 @@ class DriftStatusTool(BaseTool):
     def _run(self, tenant_id: Optional[str] = None) -> Dict[str, Any]:
         """Get drift status"""
         try:
-            with get_db_session() as session:
+            with get_db_manager().session_scope() as session:
                 with get_drift_service(session=session) as service:
                     latest_alert = service.get_latest_drift_alert(tenant_id=tenant_id)
                     unresolved_alerts = service.get_unresolved_alerts(tenant_id=tenant_id)

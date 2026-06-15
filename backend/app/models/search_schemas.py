@@ -66,7 +66,7 @@ class VectorMetadata(BaseModel):
     """
     Metadata associated with a vector in the index
 
-    FAISS only stores vectors. We need to map vector_id → metadata
+    FAISS only stores vectors. We need to map vector_id -> metadata
     """
     vector_id: int = Field(..., description="FAISS vector ID")
     prompt_id: str = Field(..., description="Unique prompt identifier (hash)")

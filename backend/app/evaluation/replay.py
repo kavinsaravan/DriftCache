@@ -236,12 +236,12 @@ class CacheDecisionReplayer:
             return "No change"
 
         if original == "HIT" and new in ["MISS", "THRESHOLD_NOT_MET"]:
-            return "Cache HIT → MISS (stricter threshold reduces hit rate)"
+            return "Cache HIT -> MISS (stricter threshold reduces hit rate)"
 
         if original in ["MISS", "THRESHOLD_NOT_MET"] and new == "HIT":
-            return "Cache MISS → HIT (looser threshold increases hit rate)"
+            return "Cache MISS -> HIT (looser threshold increases hit rate)"
 
-        return f"Decision changed: {original} → {new}"
+        return f"Decision changed: {original} -> {new}"
 
     def compare_thresholds(
         self,

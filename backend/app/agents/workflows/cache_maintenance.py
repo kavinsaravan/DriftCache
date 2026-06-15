@@ -15,7 +15,7 @@ from app.agents.tools.metrics_tools import MetricsSummaryTool, LatencyMetricsToo
 from app.agents.tools.threshold_tools import GetThresholdTool, UpdateThresholdTool
 from app.agents.tools.index_tools import IndexStatusTool, TriggerIndexRebuildTool
 from app.models.agent_action import AgentAction
-from app.database.session import get_db_session
+from app.database.session import get_db_manager
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ class CacheMaintenanceWorkflow:
     """
     Autonomous cache maintenance workflow
 
-    Flow: Load State → Analyze Drift → Analyze Quality → Decide → Execute → Validate → Report
+    Flow: Load State -> Analyze Drift -> Analyze Quality -> Decide -> Execute -> Validate -> Report
     """
 
     def __init__(self):
@@ -378,7 +378,7 @@ class CacheMaintenanceWorkflow:
                 state.workflow_status = WorkflowStatus.COMPLETED
 
             # Create database record
-            with get_db_session() as session:
+            with get_db_manager().session_scope() as session:
                 agent_action = AgentAction(
                     workflow_id=state.workflow_id,
                     workflow_status=state.workflow_status.value,

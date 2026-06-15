@@ -10,7 +10,7 @@ import numpy as np
 
 from app.evaluation.datasets import EvaluationDataset, PromptPair, EquivalenceLabel
 from app.evaluation.judges import RuleBasedJudge, JudgmentResult
-from app.cache.embeddings import get_embedding_service
+from app.embeddings.service import get_embedding_service
 
 logger = logging.getLogger(__name__)
 
@@ -132,8 +132,8 @@ class CacheQualityEvaluator:
         # Evaluate each pair
         for pair in dataset.pairs:
             # Get embeddings for both prompts
-            embedding_a = self.embedding_service.get_embedding(pair.prompt_a)
-            embedding_b = self.embedding_service.get_embedding(pair.prompt_b)
+            embedding_a = self.embedding_service.embed_text(pair.prompt_a).vector
+            embedding_b = self.embedding_service.embed_text(pair.prompt_b).vector
 
             # Calculate similarity
             similarity_score = self._cosine_similarity(embedding_a, embedding_b)

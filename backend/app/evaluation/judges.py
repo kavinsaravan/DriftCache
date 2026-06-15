@@ -95,9 +95,9 @@ class RuleBasedJudge:
         margin_abs = abs(threshold_margin)
 
         # Map margin to confidence (0.5 - 1.0)
-        # margin 0 → confidence 0.5 (uncertain)
-        # margin 0.1 → confidence 0.95
-        # margin 0.2+ → confidence 1.0
+        # margin 0 -> confidence 0.5 (uncertain)
+        # margin 0.1 -> confidence 0.95
+        # margin 0.2+ -> confidence 1.0
         confidence = 0.5 + min(margin_abs / 0.2, 0.5)
 
         return confidence

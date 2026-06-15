@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 import logging
 
 from app.metrics.service import get_metrics_service
-from app.database.session import get_db_session
+from app.database.session import get_db_manager
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ class MetricsSummaryTool(BaseTool):
         try:
             logger.info(f"Getting metrics summary: period={period}, tenant_id={tenant_id}")
 
-            with get_db_session() as session:
+            with get_db_manager().session_scope() as session:
                 with get_metrics_service(session=session) as service:
                     summary = service.get_summary(period=period, tenant_id=tenant_id)
 
@@ -116,7 +116,7 @@ class LatencyMetricsTool(BaseTool):
         try:
             logger.info(f"Getting latency metrics: period={period}, tenant_id={tenant_id}")
 
-            with get_db_session() as session:
+            with get_db_manager().session_scope() as session:
                 with get_metrics_service(session=session) as service:
                     latency = service.get_latency_breakdown(period=period, tenant_id=tenant_id)
 

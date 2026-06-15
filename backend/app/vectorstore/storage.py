@@ -4,8 +4,8 @@ Metadata Storage
 Maps FAISS vector IDs to prompt metadata and responses.
 
 FAISS only stores vectors. We need to store:
-- vector_id → prompt_id
-- prompt_id → {prompt_text, response_text, metadata}
+- vector_id -> prompt_id
+- prompt_id -> {prompt_text, response_text, metadata}
 
 For MVP: Simple JSON file storage
 For Production: PostgreSQL + Redis
@@ -27,7 +27,7 @@ class MetadataStore:
     """
     Storage for vector metadata
 
-    Maps vector_id (FAISS) → VectorMetadata (prompt, response, etc.)
+    Maps vector_id (FAISS) -> VectorMetadata (prompt, response, etc.)
     """
 
     def __init__(self, storage_path: Optional[str] = None):

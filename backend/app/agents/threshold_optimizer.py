@@ -12,7 +12,7 @@ from app.optimization.scoring import ThresholdScorer, ScoringWeights
 from app.optimization.policy import OptimizationPolicy, OptimizationConstraints
 from app.models.optimization_run import OptimizationRun
 from app.models.threshold_version import ThresholdVersion
-from app.database.session import get_db_session
+from app.database.session import get_db_manager
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ class ThresholdOptimizerAgent:
         )
 
         # Store optimization run in database
-        with get_db_session() as session:
+        with get_db_manager().session_scope() as session:
             optimization_run = OptimizationRun(
                 run_id=optimization_result["run_id"],
                 trigger_source=trigger_source,
@@ -119,12 +119,13 @@ class ThresholdOptimizerAgent:
             session.refresh(optimization_run)
 
             optimization_result["optimization_run_id"] = optimization_run.id
+            optimization_run_id = optimization_run.id  # Extract ID before session closes
 
         # If threshold should be deployed, create threshold version
         if optimization_result["decision"] in ["deploy", "simulated"]:
             threshold_version_id = self._record_threshold_version(
                 optimization_result=optimization_result,
-                optimization_run_id=optimization_run.id,
+                optimization_run_id=optimization_run_id,
                 tenant_id=tenant_id
             )
             optimization_result["threshold_version_id"] = threshold_version_id
@@ -155,7 +156,7 @@ class ThresholdOptimizerAgent:
         Returns:
             Threshold version ID
         """
-        with get_db_session() as session:
+        with get_db_manager().session_scope() as session:
             # Deactivate previous threshold
             previous_versions = session.query(ThresholdVersion).filter(
                 ThresholdVersion.is_active == True,
@@ -206,7 +207,7 @@ class ThresholdOptimizerAgent:
         Returns:
             Current threshold value
         """
-        with get_db_session() as session:
+        with get_db_manager().session_scope() as session:
             version = session.query(ThresholdVersion).filter(
                 ThresholdVersion.is_active == True,
                 ThresholdVersion.tenant_id == tenant_id
@@ -233,7 +234,7 @@ class ThresholdOptimizerAgent:
         Returns:
             List of optimization run summaries
         """
-        with get_db_session() as session:
+        with get_db_manager().session_scope() as session:
             query = session.query(OptimizationRun)
 
             if tenant_id:

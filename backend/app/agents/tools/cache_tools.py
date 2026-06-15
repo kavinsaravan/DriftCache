@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 import logging
 
 from app.evaluation.reports import get_report_generator
-from app.database.session import get_db_session
+from app.database.session import get_db_manager
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ class CacheQualityTool(BaseTool):
                 f"threshold={threshold}, tenant_id={tenant_id}"
             )
 
-            with get_db_session() as session:
+            with get_db_manager().session_scope() as session:
                 with get_report_generator(session=session) as generator:
                     # Try to get latest evaluation first
                     latest = generator.get_latest_evaluation(tenant_id=tenant_id)

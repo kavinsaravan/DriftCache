@@ -267,17 +267,21 @@ class CacheRecorder:
 
                     # Get latest vector ID from FAISS
                     # This assumes vectors are added sequentially
-                    faiss_vector_id = self.cache_service.search_service.faiss_index.get_count() - 1
+                    faiss_index = self.cache_service.search_service.faiss_index
+                    if faiss_index.index is not None and faiss_index.index.ntotal > 0:
+                        faiss_vector_id = faiss_index.index.ntotal - 1
 
-                    cache_repo.create_embedding_record(
-                        cache_id=cache_id,
-                        faiss_vector_id=faiss_vector_id,
-                        embedding_model=settings.EMBEDDING_MODEL,
-                        embedding_dimension=settings.EMBEDDING_DIMENSION
-                    )
-                    logger.debug(f"Recorded embedding: FAISS ID {faiss_vector_id} → cache {cache_id}")
+                        cache_repo.create_embedding_record(
+                            cache_id=cache_id,
+                            faiss_vector_id=faiss_vector_id,
+                            embedding_model=settings.EMBEDDING_MODEL,
+                            embedding_dimension=settings.EMBEDDING_DIMENSION
+                        )
+                        logger.debug(f"Recorded embedding: FAISS ID {faiss_vector_id} -> cache {cache_id}")
+                    else:
+                        logger.warning(f"FAISS index is empty, cannot record embedding for cache {cache_id}")
             except Exception as e:
-                logger.warning(f"Failed to record embedding: {e}")
+                logger.error(f"Failed to record embedding: {e}", exc_info=True)
 
             # Record provider call (if this was an actual LLM call)
             if provider:
