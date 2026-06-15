@@ -125,8 +125,6 @@ GET  /metrics/cache-performance    # Hit rate, latency
 GET  /drift/status                 # Current drift score
 ```
 
-Full API docs: http://localhost:8000/docs
-
 ## Autonomous Agent System
 
 **3-Layer Architecture:**
