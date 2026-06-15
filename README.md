@@ -171,30 +171,3 @@ DriftCache/
 | LLM | OpenAI GPT-4/4o-mini |
 | AI Agents | LangChain 0.3+, LangGraph |
 | Infrastructure | Docker, Alembic |
-
-## Resume Bullets
-
-**Copy-paste ready with actual metrics:**
-
-- Built DriftCache semantic caching proxy reducing LLM provider calls by **68%** using OpenAI embeddings and FAISS, achieving **15ms p95 cache latency** (144x faster than 1,850ms provider calls) and cutting estimated API costs by **$11.72 per 1,000 requests**
-
-- Designed dual Redis/PostgreSQL architecture tracking cache performance (68% hit rate), quality metrics (**94% precision, 76% recall**, F1 0.84), and cost savings across **1,000+ benchmark scenarios**
-
-- Implemented semantic drift detection using **KL divergence** and centroid shift analysis, achieving **76% semantic match accuracy** and **94% precision** on hard negatives
-
-- Built **autonomous LangGraph agents** with 10 LangChain tools that optimize similarity thresholds via multi-objective scoring and trigger FAISS index rebuilds when stale ratio exceeds 30%
-
-## Development Stats
-
-- **8 weeks** development time
-- **15,000+ lines** of code
-- **40+ API endpoints**
-- **15+ database tables**, 8 migrations
-- **10 LangChain tools**
-- **3 autonomous agents**
-- **5 demo scenarios**
-- **3 benchmark datasets**
-
-## License
-
-MIT License
