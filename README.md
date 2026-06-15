@@ -12,18 +12,6 @@ Semantic caching proxy that reduces LLM provider calls by 68% using vector embed
 - **Production Ready** - Docker deployment, health checks, zero-downtime migrations
 - **OpenAI-Compatible API** - Drop-in replacement for existing integrations
 
-## Architecture
-
-```
-Client Request → DriftCache API → [Redis + FAISS] → PostgreSQL
-                       ↓
-              Autonomous Agents (LangGraph)
-              - Drift Detection
-              - Threshold Optimization  
-              - Index Rebuild
-```
-
-
 ## Technology Stack
 
 | Component | Technology |
@@ -35,6 +23,46 @@ Client Request → DriftCache API → [Redis + FAISS] → PostgreSQL
 | LLM | OpenAI GPT-4/4o-mini |
 | AI Agents | LangChain 0.3+, LangGraph |
 | Infrastructure | Docker, Alembic |
+
+## Project Structure
+
+```
+DriftCache/
+├── backend/
+│   ├── app/
+│   │   ├── api/endpoints/           # API routes
+│   │   ├── agents/                  # Autonomous agents
+│   │   │   ├── threshold_optimizer.py
+│   │   │   ├── index_rebuild_agent.py
+│   │   │   └── supervisor.py
+│   │   ├── optimization/            # Multi-objective scoring
+│   │   ├── vectorstore/             # FAISS index management
+│   │   └── models/                  # 15+ SQLAlchemy models
+│   ├── alembic/versions/            # 8 database migrations
+│   └── Dockerfile
+├── frontend/
+│   ├── src/components/              # React dashboard
+│   └── Dockerfile
+├── benchmarks/
+│   ├── semantic_cache_benchmark.py
+│   ├── load_test.py
+│   └── datasets/                    # 3 test datasets
+├── demo/
+│   ├── run_demo.py                  # Interactive demos
+│   └── prompts/                     # Demo datasets
+└── docker-compose.yml
+```
+## Architecture
+
+```
+Client Request → DriftCache API → [Redis + FAISS] → PostgreSQL
+                       ↓
+              Autonomous Agents (LangGraph)
+              - Drift Detection
+              - Threshold Optimization  
+              - Index Rebuild
+```
+
 
 ## Quick Start
 
@@ -139,32 +167,3 @@ GET  /drift/status                 # Current drift score
 - Multi-objective optimization: precision 45%, recall 25%, cost 20%, latency 10%
 - Safe index rebuild: build new → validate → swap → backup
 - Complete audit trail of all decisions
-
-## Project Structure
-
-```
-DriftCache/
-├── backend/
-│   ├── app/
-│   │   ├── api/endpoints/           # API routes
-│   │   ├── agents/                  # Autonomous agents
-│   │   │   ├── threshold_optimizer.py
-│   │   │   ├── index_rebuild_agent.py
-│   │   │   └── supervisor.py
-│   │   ├── optimization/            # Multi-objective scoring
-│   │   ├── vectorstore/             # FAISS index management
-│   │   └── models/                  # 15+ SQLAlchemy models
-│   ├── alembic/versions/            # 8 database migrations
-│   └── Dockerfile
-├── frontend/
-│   ├── src/components/              # React dashboard
-│   └── Dockerfile
-├── benchmarks/
-│   ├── semantic_cache_benchmark.py
-│   ├── load_test.py
-│   └── datasets/                    # 3 test datasets
-├── demo/
-│   ├── run_demo.py                  # Interactive demos
-│   └── prompts/                     # Demo datasets
-└── docker-compose.yml
-```
