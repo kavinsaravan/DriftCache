@@ -13,15 +13,9 @@ services:
           name: driftcache-db
           property: connectionString
       - key: REDIS_HOST
-        fromService:
-          name: driftcache-redis
-          type: redis
-          property: host
+        sync: false  # Set manually after creating Redis instance
       - key: REDIS_PORT
-        fromService:
-          name: driftcache-redis
-          type: redis
-          property: port
+        sync: false  # Set manually after creating Redis instance
       - key: OPENAI_API_KEY
         sync: false  # Set manually in Render dashboard
       - key: PYTHON_VERSION
@@ -39,8 +33,6 @@ databases:
     plan: starter
     region: oregon
 
-  # Redis Cache
-  - name: driftcache-redis
-    plan: starter
-    region: oregon
-    maxmemoryPolicy: allkeys-lru
+# Redis is configured as a separate service type, not a database
+# Note: Render's native Redis support via YAML is limited
+# You may need to use an external Redis provider or add Redis via dashboard

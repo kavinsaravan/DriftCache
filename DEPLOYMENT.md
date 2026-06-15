@@ -29,9 +29,29 @@ Complete guide for deploying DriftCache backend on Render and frontend on Vercel
 Render will automatically detect `render.yaml` and create:
 - **Web Service**: `driftcache-api`
 - **PostgreSQL Database**: `driftcache-db`
-- **Redis Instance**: `driftcache-redis`
+
+**Note**: Redis must be added manually via the Render Dashboard (see Step 2.5 below).
 
 Click **Apply** to start deployment.
+
+### Step 2.5: Add Redis Manually
+
+After the initial deployment:
+
+1. Go to **New +** → **Redis**
+2. Configure:
+   - **Name**: `driftcache-redis`
+   - **Plan**: Starter ($10/month) or Free (25 MB)
+   - **Region**: Oregon (same as other services)
+   - **Maxmemory Policy**: `allkeys-lru`
+3. Click **Create Redis**
+4. Once created, go to your `driftcache-api` service → **Environment**
+5. Add these variables using the Redis connection details:
+   ```
+   REDIS_HOST=<your-redis-hostname>
+   REDIS_PORT=<your-redis-port>
+   ```
+6. Save and redeploy the web service
 
 ### Step 3: Configure Environment Variables
 
