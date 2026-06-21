@@ -233,3 +233,4 @@ class SupervisorAgent:
                 "action": "optimize_threshold",
                 "reason": action["reason"],
                 "result": result,
+            }
