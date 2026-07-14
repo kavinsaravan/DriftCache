@@ -2,7 +2,7 @@
 
 **Adaptive Semantic Caching & Autonomous Optimization Platform for LLM Systems**
 
-Semantic caching proxy that reduces duplicate LLM provider calls by 68% using vector embeddings and FAISS, with autonomous agents that detect drift and optimize cache performance.
+DriftCache is a semantic caching layer that sits between applications and LLM providers, using embeddings and FAISS vector search to identify semantically similar queries and reuse responses, with autonomous agents to detect semantic drift over time and optimize cache performance.
 
 ## Key Features
 
@@ -52,17 +52,93 @@ DriftCache/
 │   └── prompts/                     # Demo datasets
 └── docker-compose.yml
 ```
-## Architecture
+
+## High-Level Architecture
 
 ```
-Client Request → DriftCache API → [Redis + FAISS] → PostgreSQL
-                       ↓
-              Autonomous Agents (LangGraph)
-              - Drift Detection
-              - Threshold Optimization  
-              - Index Rebuild
+┌─────────────┐
+│ Application │
+└──────┬──────┘
+       │
+       ▼
+┌─────────────────────────────────────┐
+│         DriftCache API              │
+│  ┌─────────────────────────────┐   │
+│  │   Semantic Cache Layer      │   │
+│  │  - Embedding Generation     │   │
+│  │  - Vector Similarity Search │   │
+│  │  - Cache Hit/Miss Logic     │   │
+│  └─────────────────────────────┘   │
+│                                    │
+│  ┌─────────────────────────────┐   │
+│  │  Autonomous Optimization    │   │
+│  │  - Drift Detection          │   │
+│  │  - Self-Repair Agents       │   │
+│  │  - Performance Monitoring   │   │
+│  └─────────────────────────────┘   │
+└─────────────────────────────────────┘
+       │                    │
+       ▼                    ▼
+┌─────────────┐      ┌─────────────┐
+│ PostgreSQL  │      │   Redis     │
+│ (Metadata)  │      │  (Cache)    │
+└─────────────┘      └─────────────┘
+       │
+       ▼
+┌─────────────┐
+│   Claude    │
+│   (LLM)     │
+└─────────────┘
 ```
 
+## Core Components
+
+### 1. Semantic Cache Layer
+- **Embedding Service**: Generates vector embeddings from prompts
+- **Vector Store**: Stores and indexes embeddings for fast similarity search
+- **Cache Manager**: Handles cache hits, misses, and TTL
+
+### 2. LLM Integration
+- **Provider Abstraction**: Unified interface for LLM providers (Claude, etc.)
+- **Request/Response Handling**: Manages API calls to LLM providers
+- **Error Handling & Retries**: Resilient LLM communication
+
+### 3. Autonomous Optimization (LangGraph Agents)
+- **Drift Detection Agent**: Monitors cache quality degradation
+- **Optimization Agent**: Automatically adjusts similarity thresholds
+- **Repair Agent**: Self-heals cache inconsistencies
+
+### 4. Data Persistence
+- **PostgreSQL**: Stores metadata, analytics, and configuration
+- **Redis**: Fast in-memory cache for responses and embeddings
+
+### 5. API Layer (FastAPI)
+- **REST Endpoints**: HTTP API for applications
+- **WebSocket**: Real-time updates and monitoring
+- **Authentication**: API key management
+
+### 6. Frontend Dashboard (React)
+- **Analytics View**: Cache hit rates, cost savings
+- **Configuration**: Threshold adjustments, model selection
+- **Monitoring**: Real-time system health
+
+## Request Flow
+
+### Cache Hit Path
+1. Application sends prompt to DriftCache API
+2. Generate embedding for prompt
+3. Search vector store for similar embeddings (above threshold)
+4. If match found → return cached response
+5. Log cache hit, update metrics
+
+### Cache Miss Path
+1. Application sends prompt to DriftCache API
+2. Generate embedding for prompt
+3. Search vector store → no match found
+4. Forward request to Claude
+5. Store response + embedding in cache
+6. Return response to application
+7. Log cache miss, update metrics
 
 ## Quick Start
 
