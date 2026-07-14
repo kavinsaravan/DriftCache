@@ -309,3 +309,6 @@ class IndexHealthMonitor:
         summary += f"Average latency: {latency:.1f}ms\n"
 
         if needs_rebuild:
+            summary += f"\n⚠️  Rebuild recommended: {rebuild_reason}"
+
+        return summary
