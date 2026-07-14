@@ -138,20 +138,6 @@ for chunk in stream:
         print(chunk.choices[0].delta.content, end='', flush=True)
 ```
 
-## Model Mapping
-
-DriftCache automatically maps OpenAI model names to Claude models:
-
-| OpenAI Model | Claude Model |
-|--------------|--------------|
-| `gpt-4` | `claude-3-5-sonnet-20241022` |
-| `gpt-4-turbo` | `claude-3-5-sonnet-20241022` |
-| `gpt-3.5-turbo` | `claude-3-haiku-20240307` |
-| `claude-3-5-sonnet` | `claude-3-5-sonnet-20241022` |
-| `claude-3-opus` | `claude-3-opus-20240229` |
-| `claude-3-sonnet` | `claude-3-sonnet-20240229` |
-| `claude-3-haiku` | `claude-3-haiku-20240307` |
-
 ## Error Handling
 
 If a request fails, you'll receive an error response:
