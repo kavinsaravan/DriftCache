@@ -2,7 +2,7 @@
 
 **Adaptive Semantic Caching & Autonomous Optimization Platform for LLM Systems**
 
-Semantic caching proxy that reduces LLM provider calls by 68% using vector embeddings and FAISS, with autonomous agents that detect drift and optimize cache performance.
+Semantic caching proxy that reduces duplicate LLM provider calls by 68% using vector embeddings and FAISS, with autonomous agents that detect drift and optimize cache performance.
 
 ## Key Features
 
