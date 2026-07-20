@@ -17,8 +17,19 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
         "http://localhost:5173",
-        "https://*.vercel.app",  # Vercel preview and production deployments
     ]
+
+    # Vercel domains (set via env var in production)
+    VERCEL_DOMAIN: str = Field(default="")
+
+    @property
+    def cors_origins(self) -> List[str]:
+        """Get CORS origins including Vercel domain if set"""
+        origins = self.CORS_ORIGINS.copy()
+        if self.VERCEL_DOMAIN:
+            # Add specific Vercel domain
+            origins.append(f"https://{self.VERCEL_DOMAIN}")
+        return origins
 
     # Database
     DATABASE_URL: str = Field(default="sqlite:///./driftcache.db")
