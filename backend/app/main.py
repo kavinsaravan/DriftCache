@@ -35,13 +35,27 @@ async def lifespan(app: FastAPI):
         db_manager = get_db_manager()
         logger.info("PostgreSQL connection established")
 
-        # Create tables if they don't exist (for dev)
-        # In production, use Alembic migrations
+        # Run Alembic migrations automatically
         try:
-            db_manager.create_tables()
-            logger.info("Database tables initialized")
+            from alembic.config import Config
+            from alembic import command
+            import os
+
+            # Get alembic config path
+            alembic_cfg = Config(os.path.join(os.path.dirname(__file__), "..", "alembic.ini"))
+            alembic_cfg.set_main_option("script_location", os.path.join(os.path.dirname(__file__), "..", "alembic"))
+
+            # Run migrations
+            command.upgrade(alembic_cfg, "head")
+            logger.info("Database migrations completed successfully")
         except Exception as e:
-            logger.warning(f"Failed to create tables (may already exist): {e}")
+            logger.warning(f"Failed to run migrations, trying create_tables: {e}")
+            # Fallback to create_tables for dev
+            try:
+                db_manager.create_tables()
+                logger.info("Database tables initialized")
+            except Exception as e2:
+                logger.warning(f"Failed to create tables (may already exist): {e2}")
 
     except Exception as e:
         logger.error(f"Failed to connect to PostgreSQL: {e}")
