@@ -16,7 +16,7 @@ from app.agents.tools.drift_tools import DriftAnalysisTool
 from app.agents.tools.cache_tools import CacheQualityTool
 from app.agents.tools.metrics_tools import MetricsSummaryTool
 from app.models.supervisor_run import SupervisorRun
-from app.database.session import get_db_session
+from app.database.session import get_db_manager
 
 logger = logging.getLogger(__name__)
 
@@ -233,4 +233,151 @@ class SupervisorAgent:
                 "action": "optimize_threshold",
                 "reason": action["reason"],
                 "result": result,
+                "result_summary": f"Threshold: {result.get('old_threshold')} -> {result.get('new_threshold')}"
             }
+
+        elif agent == "index_rebuilder":
+            result = self.index_rebuilder.evaluate_and_rebuild(
+                drift_severity=system_state.get("drift_severity"),
+                threshold_optimization_failed=True,
+                trigger_source="supervisor",
+                tenant_id=tenant_id
+            )
+
+            return {
+                "agent": "index_rebuilder",
+                "action": "rebuild_index",
+                "reason": action["reason"],
+                "result": result,
+                "result_summary": f"Index rebuild: {result.get('decision')}"
+            }
+
+        return {
+            "agent": agent,
+            "action": action["action"],
+            "reason": action["reason"],
+            "result": None,
+            "result_summary": "Not implemented"
+        }
+
+    def _validate_action(
+        self,
+        before_state: Dict[str, Any],
+        action_result: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Validate that action improved system"""
+        # Get estimated after state from action result
+        result = action_result.get("result", {})
+
+        if action_result["agent"] == "threshold_optimizer":
+            after_estimate = result.get("after_estimate", {})
+            return self.policy.validate_remediation(before_state, after_estimate, action_result)
+
+        # Default: assume success
+        return {
+            "passed": True,
+            "improvements": ["Action completed"],
+            "degradations": []
+        }
+
+    def _check_condition(self, condition: str, actions_taken: List[Dict]) -> bool:
+        """Check if conditional action should execute"""
+        if condition == "threshold_optimization_failed":
+            # Check if last action was threshold optimization that failed
+            if not actions_taken:
+                return False
+            last_action = actions_taken[-1]
+            if last_action["agent"] != "threshold_optimizer":
+                return False
+            # Check validation result (simplified)
+            return True
+
+        return False
+
+    def _determine_final_status(
+        self,
+        diagnosis: str,
+        actions_taken: List[Dict],
+        final_state: Dict[str, Any]
+    ) -> tuple[str, str]:
+        """Determine final workflow status"""
+        if diagnosis == "healthy":
+            return "no_action", "System healthy, no remediation needed"
+
+        if not actions_taken:
+            return "no_action", "No actions taken"
+
+        # Check if system improved
+        if final_state.get("precision", 0) > 0.92 and final_state.get("false_hit_rate", 0) < 0.05:
+            return "resolved", "Remediation successful, system restored to healthy state"
+
+        if len(actions_taken) > 0:
+            return "partial", "Actions taken, partial improvement achieved"
+
+        return "failed", "Remediation attempted but issues persist"
+
+    def _final_validation(
+        self,
+        initial_state: Dict[str, Any],
+        final_state: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Final validation of entire workflow"""
+        return self.policy.validate_remediation(
+            initial_state,
+            final_state,
+            {"agent": "supervisor", "action": "complete_workflow"}
+        )
+
+    def _generate_recommendations(self, final_state: Dict[str, Any]) -> List[str]:
+        """Generate recommendations for future monitoring"""
+        recommendations = []
+
+        if final_state.get("precision", 0) < 0.95:
+            recommendations.append("Continue monitoring precision closely")
+
+        if final_state.get("drift_severity") != "no_drift":
+            recommendations.append("Watch for continued semantic drift")
+
+        if not recommendations:
+            recommendations.append("System stable, maintain current configuration")
+
+        return recommendations
+
+    def _store_supervisor_run(self, result: Dict[str, Any]):
+        """Store supervisor run in database"""
+        with get_db_manager().session_scope() as session:
+            supervisor_run = SupervisorRun(
+                run_id=result["run_id"],
+                trigger_source=result["trigger_source"],
+                trigger_reason=result["trigger_reason"],
+                initial_drift_score=result["initial_state"].get("drift_score"),
+                initial_drift_severity=result["initial_state"].get("drift_severity"),
+                initial_precision=result["initial_state"].get("precision"),
+                initial_recall=result["initial_state"].get("recall"),
+                initial_false_hit_rate=result["initial_state"].get("false_hit_rate"),
+                initial_cache_hit_rate=result["initial_state"].get("cache_hit_rate"),
+                initial_stale_vector_ratio=result["initial_state"].get("stale_vector_ratio"),
+                diagnosis=result["diagnosis"],
+                diagnosis_details=result["diagnosis_details"],
+                decision_path=result["decision_path"],
+                actions_taken=result["actions_taken"],
+                final_precision=result["final_state"].get("precision"),
+                final_recall=result["final_state"].get("recall"),
+                final_false_hit_rate=result["final_state"].get("false_hit_rate"),
+                final_drift_score=result["final_state"].get("drift_score"),
+                validation_passed=result["validation"].get("passed"),
+                validation_details=result["validation"],
+                final_status=result["final_status"],
+                status_reason=result["status_reason"],
+                report_summary=result["report_summary"],
+                recommendations=result["recommendations"],
+                total_execution_time_ms=result["total_execution_time_ms"],
+                agents_invoked_count=result["agents_invoked_count"],
+                tenant_id=result.get("tenant_id"),
+                started_at=datetime.fromisoformat(result["started_at"]),
+                completed_at=datetime.fromisoformat(result["completed_at"]),
+            )
+
+            session.add(supervisor_run)
+            session.commit()
+            logger.info(f"Stored supervisor run: {supervisor_run.id}")

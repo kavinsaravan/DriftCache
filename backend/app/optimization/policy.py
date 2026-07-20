@@ -247,3 +247,44 @@ class OptimizationPolicy:
             return False, "DRY RUN mode enabled - would deploy in production"
 
         # All checks passed
+        return True, f"Threshold change approved: {old_threshold} -> {new_threshold} (score improvement: {improvement:.3f})"
+
+    def _estimate_score(self, metrics: Dict[str, float]) -> float:
+        """
+        Estimate optimization score from metrics
+
+        This should match the scoring function used in scoring.py
+        """
+        precision = metrics.get("precision", 0)
+        recall = metrics.get("recall", 0)
+        false_hit_rate = metrics.get("false_hit_rate", 1)
+
+        # Simple weighted score (matches scoring.py)
+        score = (
+            0.45 * precision +
+            0.25 * recall +
+            0.10 * (1 - false_hit_rate)  # Penalty for false hits
+        )
+
+        return score
+
+    def get_constraints_summary(self) -> Dict[str, Any]:
+        """Get summary of active constraints"""
+        return {
+            "threshold_bounds": {
+                "min": self.constraints.min_threshold,
+                "max": self.constraints.max_threshold,
+                "max_change": self.constraints.max_change_per_step,
+            },
+            "quality_requirements": {
+                "min_precision": self.constraints.min_precision,
+                "max_false_hit_rate": self.constraints.max_false_hit_rate,
+                "min_recall": self.constraints.min_recall,
+            },
+            "safety_settings": {
+                "require_validation": self.constraints.require_validation,
+                "min_dataset_size": self.constraints.min_dataset_size,
+                "min_hours_between_changes": self.constraints.min_hours_between_changes,
+                "dry_run": self.constraints.dry_run,
+            }
+        }
