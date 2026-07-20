@@ -285,3 +285,9 @@ class ThresholdSearcher:
         explanation += f"Reason: {reason}\n\n"
 
         explanation += "Expected improvements:\n"
+        explanation += f"  Precision: {before.get('precision', 0):.3f} -> {after.get('precision', 0):.3f}\n"
+        explanation += f"  Recall: {before.get('recall', 0):.3f} -> {after.get('recall', 0):.3f}\n"
+        explanation += f"  False Hit Rate: {before.get('false_hit_rate', 0):.3f} -> {after.get('false_hit_rate', 0):.3f}\n"
+        explanation += f"  Cache Hit Rate: {before.get('cache_hit_rate', 0):.3f} -> {after.get('cache_hit_rate', 0):.3f}\n"
+
+        return explanation

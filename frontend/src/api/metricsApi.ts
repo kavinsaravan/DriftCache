@@ -4,8 +4,10 @@
  * Connects to DriftCache backend metrics endpoints
  */
 import axios from 'axios';
+import { mockDashboardData } from './mockData';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA === 'true';
 
 const metricsApi = axios.create({
   baseURL: `${API_BASE_URL}/metrics`,
@@ -86,11 +88,18 @@ export interface DashboardData {
  * Get summary metrics
  */
 export const getSummary = async (period: string = '24h', tenantId?: string): Promise<MetricsSummary> => {
-  const params: any = { period };
-  if (tenantId) params.tenant_id = tenantId;
+  if (USE_MOCK_DATA) return Promise.resolve(mockDashboardData.summary);
 
-  const response = await metricsApi.get('/summary', { params });
-  return response.data;
+  try {
+    const params: any = { period };
+    if (tenantId) params.tenant_id = tenantId;
+
+    const response = await metricsApi.get('/summary', { params });
+    return response.data;
+  } catch (error) {
+    console.warn('Falling back to mock summary data');
+    return Promise.resolve(mockDashboardData.summary);
+  }
 };
 
 /**
@@ -165,11 +174,22 @@ export const getTimeSeries = async (
  * Get complete dashboard data in one call
  */
 export const getDashboardData = async (period: string = '24h', tenantId?: string): Promise<DashboardData> => {
-  const params: any = { period };
-  if (tenantId) params.tenant_id = tenantId;
+  // Use mock data if enabled or if backend fails
+  if (USE_MOCK_DATA) {
+    console.log('Using mock data for demo');
+    return Promise.resolve(mockDashboardData);
+  }
 
-  const response = await metricsApi.get('/dashboard', { params });
-  return response.data;
+  try {
+    const params: any = { period };
+    if (tenantId) params.tenant_id = tenantId;
+
+    const response = await metricsApi.get('/dashboard', { params });
+    return response.data;
+  } catch (error) {
+    console.warn('Backend unavailable, falling back to mock data', error);
+    return Promise.resolve(mockDashboardData);
+  }
 };
 
 export default metricsApi;

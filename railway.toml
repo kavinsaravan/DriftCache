@@ -1,0 +1,18 @@
+[build]
+builder = "nixpacks"
+
+[build.nixpacksPlan]
+providers = ["python"]
+
+[build.nixpacksPlan.phases.install]
+cmds = ["pip install -r backend/requirements.txt"]
+
+[build.nixpacksPlan.phases.build]
+cmds = ["echo 'Build complete'"]
+
+[deploy]
+startCommand = "bash start.sh"
+healthcheckPath = "/health"
+healthcheckTimeout = 100
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10

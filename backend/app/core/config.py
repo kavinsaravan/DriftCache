@@ -17,8 +17,19 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
         "http://localhost:5173",
-        "https://*.vercel.app",  # Vercel preview and production deployments
     ]
+
+    # Vercel domains (set via env var in production)
+    VERCEL_DOMAIN: str = Field(default="")
+
+    @property
+    def cors_origins(self) -> List[str]:
+        """Get CORS origins including Vercel domain if set"""
+        origins = self.CORS_ORIGINS.copy()
+        if self.VERCEL_DOMAIN:
+            # Add specific Vercel domain
+            origins.append(f"https://{self.VERCEL_DOMAIN}")
+        return origins
 
     # Database
     DATABASE_URL: str = Field(default="sqlite:///./driftcache.db")
@@ -31,18 +42,21 @@ class Settings(BaseSettings):
     @property
     def DB_URL(self) -> str:
         """Return DATABASE_URL if set, otherwise construct PostgreSQL URL"""
-        if self.DATABASE_URL and not self.DATABASE_URL.startswith("postgresql://"):
+        if self.DATABASE_URL and self.DATABASE_URL.startswith(("postgresql://", "postgres://", "sqlite://")):
             return self.DATABASE_URL
         return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
     # Redis
+    REDIS_URL: str = Field(default="")
     REDIS_HOST: str = Field(default="localhost")
     REDIS_PORT: int = Field(default=6379)
     REDIS_DB: int = Field(default=0)
     REDIS_PASSWORD: str = Field(default="")
 
-    @property
-    def REDIS_URL(self) -> str:
+    def get_redis_url(self) -> str:
+        """Get Redis URL from env var or construct from components"""
+        if self.REDIS_URL:
+            return self.REDIS_URL
         if self.REDIS_PASSWORD:
             return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
