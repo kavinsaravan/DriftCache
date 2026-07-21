@@ -22,13 +22,24 @@ class Settings(BaseSettings):
     # Vercel domains (set via env var in production)
     VERCEL_DOMAIN: str = Field(default="")
 
+    # Allow all Vercel domains (for preview deployments)
+    ALLOW_ALL_VERCEL: bool = Field(default=True)
+
     @property
     def cors_origins(self) -> List[str]:
         """Get CORS origins including Vercel domain if set"""
         origins = self.CORS_ORIGINS.copy()
+
+        # Add specific Vercel domain
         if self.VERCEL_DOMAIN:
-            # Add specific Vercel domain
             origins.append(f"https://{self.VERCEL_DOMAIN}")
+
+        # For development: allow all Vercel preview deployments
+        # Note: In production, you should set specific domains only
+        if self.ALLOW_ALL_VERCEL:
+            # This is handled in main.py with allow_origin_regex
+            pass
+
         return origins
 
     # Database
