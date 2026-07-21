@@ -13,6 +13,6 @@ cmds = ["echo 'Build complete'"]
 [deploy]
 startCommand = "bash start.sh"
 healthcheckPath = "/health"
-healthcheckTimeout = 100
+healthcheckTimeout = 300
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 10
