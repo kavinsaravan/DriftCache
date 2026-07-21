@@ -64,9 +64,14 @@ async def lifespan(app: FastAPI):
     # Initialize Redis connection
     try:
         redis_manager = await get_redis_manager()
-        logger.info("Redis connection established")
+        # Verify connection is working
+        if await redis_manager.health_check():
+            logger.info("Redis connection established and verified")
+        else:
+            logger.error("Redis health check failed after connection")
     except Exception as e:
         logger.error(f"Failed to connect to Redis: {e}")
+        logger.error(f"Redis URL being used: {settings.get_redis_url()[:20]}...")  # Log first 20 chars for debugging
         logger.warning("Running without Redis - cache will use fallback storage")
 
     yield
