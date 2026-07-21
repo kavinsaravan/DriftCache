@@ -54,12 +54,19 @@ export default function Dashboard() {
     );
   }
 
-  if (!data) return null;
+  // Safety check: ensure data has required structure
+  if (!data || !data.summary || !data.latency) {
+    return (
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+        <p className="text-yellow-800">No data available. Please check backend connection.</p>
+      </div>
+    );
+  }
 
   const { summary, latency, similarity_distribution, top_cached_prompts } = data;
 
   // Calculate hit rate percentage
-  const hitRatePercent = Math.round(summary.cache_hit_rate * 100);
+  const hitRatePercent = Math.round((summary?.cache_hit_rate || 0) * 100);
 
   // Format currency
   const formatCurrency = (amount: number) => {
