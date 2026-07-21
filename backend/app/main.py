@@ -64,9 +64,14 @@ async def lifespan(app: FastAPI):
     # Initialize Redis connection
     try:
         redis_manager = await get_redis_manager()
-        logger.info("Redis connection established")
+        # Verify connection is working
+        if await redis_manager.health_check():
+            logger.info("Redis connection established and verified")
+        else:
+            logger.error("Redis health check failed after connection")
     except Exception as e:
         logger.error(f"Failed to connect to Redis: {e}")
+        logger.error(f"Redis URL being used: {settings.get_redis_url()[:20]}...")  # Log first 20 chars for debugging
         logger.warning("Running without Redis - cache will use fallback storage")
 
     yield
@@ -90,13 +95,25 @@ app = FastAPI(
 )
 
 # CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Allow all Vercel domains for demo/preview deployments
+if settings.ALLOW_ALL_VERCEL:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r"https://.*\.vercel\.app",  # Allow all Vercel domains
+        allow_origins=settings.cors_origins,  # Also allow explicit origins
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    # Production: only allow explicit origins
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # Include API routes
 app.include_router(api_router, prefix="/api/v1")

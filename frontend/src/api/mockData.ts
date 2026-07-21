@@ -94,6 +94,36 @@ export const mockProviderUsage = {
   }
 };
 
+// Generate mock time series data
+const generateMockTimeSeries = (metric: 'hit_rate' | 'latency' | 'requests') => {
+  const now = new Date();
+  const data = [];
+
+  for (let i = 23; i >= 0; i--) {
+    const timestamp = new Date(now.getTime() - i * 60 * 60 * 1000);
+    let value;
+
+    if (metric === 'hit_rate') {
+      value = 0.65 + Math.random() * 0.1; // 65-75%
+    } else if (metric === 'latency') {
+      value = 8 + Math.random() * 4; // 8-12ms
+    } else {
+      value = Math.floor(40 + Math.random() * 20); // 40-60 requests
+    }
+
+    data.push({
+      timestamp: timestamp.toISOString(),
+      value
+    });
+  }
+
+  return data;
+};
+
+export const mockTimeSeriesHitRate = generateMockTimeSeries('hit_rate');
+export const mockTimeSeriesLatency = generateMockTimeSeries('latency');
+export const mockTimeSeriesRequests = generateMockTimeSeries('requests');
+
 export const mockDashboardData = {
   period: "24h",
   generated_at: new Date().toISOString(),

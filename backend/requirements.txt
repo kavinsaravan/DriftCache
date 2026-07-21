@@ -26,6 +26,13 @@ numpy==1.26.3
 faiss-cpu==1.7.4
 scikit-learn==1.4.0
 
+# Fine-tuning & Model Training
+transformers>=4.30.0
+datasets>=2.14.0
+accelerate>=0.20.0
+huggingface-hub>=0.16.0
+wandb>=0.15.0
+
 # Utilities
 python-dotenv==1.0.0
 httpx>=0.27.0
