@@ -11,7 +11,6 @@ Orchestrates the complete semantic caching flow:
 Week 3 Update: Now uses Redis for online serving layer
 """
 import logging
-import time
 from typing import Optional, List
 from datetime import datetime, timedelta
 import uuid
@@ -26,8 +25,6 @@ from app.models.cache_schemas import (
     CacheDecisionResult,
     CachedResponse,
     CacheConfig,
-    CacheRequest,
-    CacheStoreRequest,
     CacheKey,
 )
 from app.models.schemas import Message
