@@ -86,6 +86,11 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = Field(default="all-MiniLM-L6-v2")
     EMBEDDING_DIMENSION: int = Field(default=384)
 
+    # Fine-Tuning & Model Training
+    HF_TOKEN: str = Field(default="", description="Hugging Face API token for model uploads")
+    WANDB_API_KEY: str = Field(default="", description="Weights & Biases API key for experiment tracking")
+    ENABLE_TRAINING: bool = Field(default=True, description="Enable fine-tuning capabilities")
+
     # Vector Search
     VECTOR_INDEX_TYPE: str = Field(default="FLAT")  # FLAT, IVF, HNSW
 
