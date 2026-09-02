@@ -7,8 +7,10 @@ DriftCache is a semantic caching layer that sits between applications and LLM pr
 ## Key Features
 
 - **Semantic Caching** - OpenAI embeddings + FAISS vector search to recognize paraphrased queries
+- **Fine-Tuning Pipeline** - PyTorch & Hugging Face integration to fine-tune embeddings on domain-specific data
 - **Autonomous Optimization** - LangGraph agents detect drift and auto-tune similarity thresholds
 - **Self-Healing Infrastructure** - Automatic index rebuilds when degradation is detected
+- **A/B Testing Framework** - Safe model deployment with gradual traffic rollout
 - **Production Ready** - Docker deployment, health checks, zero-downtime migrations
 - **OpenAI-Compatible API** - Drop-in replacement for existing integrations
 
@@ -19,8 +21,9 @@ DriftCache is a semantic caching layer that sits between applications and LLM pr
 | Backend | FastAPI, Python 3.11, Pydantic |
 | Frontend | React, Recharts, Nginx |
 | Caching | Redis 7, PostgreSQL 15 |
-| Vector Search | FAISS, OpenAI embeddings |
-| LLM | OpenAI GPT-4/4o-mini |
+| Vector Search | FAISS, sentence-transformers |
+| ML Training | PyTorch 2.2, Hugging Face Transformers |
+| LLM | OpenAI GPT-4/4o-mini, Anthropic Claude |
 | AI Agents | LangChain 0.3+, LangGraph |
 | Infrastructure | Docker, Alembic |
 
@@ -35,10 +38,14 @@ DriftCache/
 │   │   │   ├── threshold_optimizer.py
 │   │   │   ├── index_rebuild_agent.py
 │   │   │   └── supervisor.py
+│   │   ├── training/                # Fine-tuning pipeline
+│   │   │   ├── data_generator.py   # Training data collection
+│   │   │   ├── trainer.py          # PyTorch training
+│   │   │   └── evaluator.py        # Model evaluation
 │   │   ├── optimization/            # Multi-objective scoring
 │   │   ├── vectorstore/             # FAISS index management
-│   │   └── models/                  # 15+ SQLAlchemy models
-│   ├── alembic/versions/            # 8 database migrations
+│   │   └── models/                  # 18+ SQLAlchemy models
+│   ├── alembic/versions/            # 9 database migrations
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/components/              # React dashboard
@@ -61,22 +68,29 @@ DriftCache/
 └──────┬──────┘
        │
        ▼
-┌─────────────────────────────────────┐
-│         DriftCache API              │
-│  ┌─────────────────────────────┐   │
-│  │   Semantic Cache Layer      │   │
-│  │  - Embedding Generation     │   │
-│  │  - Vector Similarity Search │   │
-│  │  - Cache Hit/Miss Logic     │   │
-│  └─────────────────────────────┘   │
-│                                    │
-│  ┌─────────────────────────────┐   │
-│  │  Autonomous Optimization    │   │
-│  │  - Drift Detection          │   │
-│  │  - Self-Repair Agents       │   │
-│  │  - Performance Monitoring   │   │
-│  └─────────────────────────────┘   │
-└─────────────────────────────────────┘
+┌─────────────────────────────────────────────┐
+│         DriftCache API                      │
+│  ┌─────────────────────────────────────┐   │
+│  │   Semantic Cache Layer              │   │
+│  │  - Embedding Generation             │   │
+│  │  - Vector Similarity Search         │   │
+│  │  - Cache Hit/Miss Logic             │   │
+│  └─────────────────────────────────────┘   │
+│                                            │
+│  ┌─────────────────────────────────────┐   │
+│  │  Fine-Tuning Pipeline               │   │
+│  │  - Training Data Collection         │   │
+│  │  - PyTorch Contrastive Learning     │   │
+│  │  - Model Evaluation & A/B Testing   │   │
+│  └─────────────────────────────────────┘   │
+│                                            │
+│  ┌─────────────────────────────────────┐   │
+│  │  Autonomous Optimization            │   │
+│  │  - Drift Detection                  │   │
+│  │  - Self-Repair Agents               │   │
+│  │  - Performance Monitoring           │   │
+│  └─────────────────────────────────────┘   │
+└─────────────────────────────────────────────┘
        │                    │
        ▼                    ▼
 ┌─────────────┐      ┌─────────────┐
@@ -85,10 +99,10 @@ DriftCache/
 └─────────────┘      └─────────────┘
        │
        ▼
-┌─────────────┐
-│   Claude    │
-│   (LLM)     │
-└─────────────┘
+┌─────────────┐      ┌──────────────────┐
+│   Claude    │      │ Hugging Face Hub │
+│   (LLM)     │      │ (Model Registry) │
+└─────────────┘      └──────────────────┘
 ```
 
 ## Core Components
@@ -103,21 +117,28 @@ DriftCache/
 - **Request/Response Handling**: Manages API calls to LLM providers
 - **Error Handling & Retries**: Resilient LLM communication
 
-### 3. Autonomous Optimization (LangGraph Agents)
+### 3. Fine-Tuning Pipeline (PyTorch + Hugging Face)
+- **Training Data Collection**: Mines cache interactions for positive/negative pairs
+- **Contrastive Learning**: PyTorch training with Multiple Negatives Ranking Loss
+- **Model Evaluation**: Precision@K, Recall@K, MRR, NDCG metrics
+- **Model Versioning**: Hugging Face Hub integration for model registry
+- **A/B Testing**: Gradual model rollout with traffic splitting
+
+### 4. Autonomous Optimization (LangGraph Agents)
 - **Drift Detection Agent**: Monitors cache quality degradation
 - **Optimization Agent**: Automatically adjusts similarity thresholds
 - **Repair Agent**: Self-heals cache inconsistencies
 
-### 4. Data Persistence
+### 5. Data Persistence
 - **PostgreSQL**: Stores metadata, analytics, and configuration
 - **Redis**: Fast in-memory cache for responses and embeddings
 
-### 5. API Layer (FastAPI)
+### 6. API Layer (FastAPI)
 - **REST Endpoints**: HTTP API for applications
 - **WebSocket**: Real-time updates and monitoring
 - **Authentication**: API key management
 
-### 6. Frontend Dashboard (React)
+### 7. Frontend Dashboard (React)
 - **Analytics View**: Cache hit rates, cost savings
 - **Configuration**: Threshold adjustments, model selection
 - **Monitoring**: Real-time system health
@@ -216,6 +237,15 @@ POST /v1/chat/completions          # OpenAI-compatible chat
 GET  /v1/models                    # List models
 ```
 
+**Fine-Tuning:**
+```bash
+POST /training/collect-data        # Collect training pairs from cache
+POST /training/jobs                # Start fine-tuning job
+GET  /training/jobs/{job_id}       # Monitor training progress
+POST /models/{version_id}/deploy   # Deploy model with A/B testing
+GET  /training/stats               # Training statistics
+```
+
 **Autonomous Agents:**
 ```bash
 POST /supervisor/run               # Trigger autonomous optimization
@@ -228,6 +258,50 @@ GET  /benchmark/summary            # Latest benchmark results
 GET  /metrics/cache-performance    # Hit rate, latency
 GET  /drift/status                 # Current drift score
 ```
+
+## Fine-Tuning Pipeline
+
+**End-to-End ML Infrastructure:**
+
+DriftCache includes a complete fine-tuning pipeline to adapt the embedding model to your specific domain:
+
+**1. Training Data Collection**
+```bash
+POST /api/v1/training/collect-data
+```
+- Automatically mines cache interactions
+- Generates positive pairs (high similarity, cache hits)
+- Generates hard negatives (medium similarity, shouldn't match)
+- Generates easy negatives (random dissimilar queries)
+
+**2. PyTorch Training**
+```bash
+POST /api/v1/training/jobs
+```
+- Contrastive learning with Multiple Negatives Ranking Loss
+- Learning rate warmup and checkpoint management
+- Configurable hyperparameters (batch size, epochs, learning rate)
+
+**3. Model Evaluation**
+- Precision@K, Recall@K metrics
+- Mean Reciprocal Rank (MRR)
+- Normalized Discounted Cumulative Gain (NDCG)
+- Latency benchmarking
+
+**4. A/B Testing & Deployment**
+```bash
+POST /api/v1/training/models/{version_id}/deploy
+```
+- Deploy new models with traffic percentage (10% → 50% → 100%)
+- Compare performance against baseline
+- Safe rollback if regression detected
+
+**5. Hugging Face Integration**
+- Upload models to Hugging Face Hub
+- Model versioning and registry
+- Easy sharing and collaboration
+
+See [FINE_TUNING_IMPLEMENTATION.md](FINE_TUNING_IMPLEMENTATION.md) for detailed documentation.
 
 ## Autonomous Agent System
 
