@@ -11,7 +11,6 @@ DriftCache is a semantic caching layer that sits between applications and LLM pr
 - **Autonomous Optimization** - LangGraph agents detect drift and auto-tune similarity thresholds
 - **Self-Healing Infrastructure** - Automatic index rebuilds when degradation is detected
 - **A/B Testing Framework** - Safe model deployment with gradual traffic rollout
-- **Production Ready** - Docker deployment, health checks, zero-downtime migrations
 - **OpenAI-Compatible API** - Drop-in replacement for existing integrations
 
 ## Technology Stack
@@ -149,7 +148,7 @@ DriftCache/
 1. Application sends prompt to DriftCache API
 2. Generate embedding for prompt
 3. Search vector store for similar embeddings (above threshold)
-4. If match found → return cached response
+4. If a match is found → return cached response
 5. Log cache hit, update metrics
 
 ### Cache Miss Path
@@ -196,13 +195,6 @@ python demo/seed_cache.py
 python demo/run_demo.py --all                # Basic demos
 python demo/generate_drift.py all            # Autonomous demos
 ```
-
-**5 Demo Scenarios:**
-1. **Semantic Cache Savings** - Paraphrased questions get cache hits (9ms vs 1,850ms)
-2. **Threshold Tradeoff** - Precision vs recall balance
-3. **Drift Detection** - Monitors semantic distribution changes across domains
-4. **Autonomous Optimization** - Agents auto-tune thresholds without human intervention
-5. **Index Rebuild** - Self-healing when stale ratio exceeds 30%
 
 ## Benchmarking
 
