@@ -3,9 +3,9 @@ Claude LLM Provider
 Handles communication with Anthropic's Claude API
 """
 import time
-from typing import AsyncIterator, List, Dict, Any
+from typing import AsyncIterator, List, Dict
 from anthropic import AsyncAnthropic
-from anthropic.types import Message as ClaudeMessage, MessageStreamEvent
+from anthropic.types import Message as ClaudeMessage
 
 from app.core.config import settings
 from app.models.schemas import (
