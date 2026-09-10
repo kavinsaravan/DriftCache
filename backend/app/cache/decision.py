@@ -134,7 +134,7 @@ class CacheDecisionEngine:
 
         logger.info(
             f"Cache decision: {decision.value} "
-            f"(similarity={similarity:.3f if similarity else 0}, "
+            f"(similarity={similarity or 0:.3f}, "
             f"threshold={self.config.similarity_threshold})"
         )
 
@@ -273,14 +273,14 @@ class CacheDecisionEngine:
         if not similarity_ok:
             return (
                 CacheDecision.THRESHOLD_NOT_MET,
-                f"Similarity {similarity:.3f if similarity else 0} "
+                f"Similarity {similarity or 0:.3f} "
                 f"< threshold {self.config.similarity_threshold}"
             )
 
         # ALL checks passed -> CACHE HIT!
         return (
             CacheDecision.HIT,
-            f"Cache hit with similarity {similarity:.3f if similarity else 0}"
+            f"Cache hit with similarity {similarity or 0:.3f}"
         )
 
     def update_config(self, **updates) -> None:
