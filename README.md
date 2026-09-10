@@ -181,6 +181,168 @@ Services:
 - Backend API: http://localhost:8000
 - API Docs: http://localhost:8000/docs
 
+## Integration Guide
+
+DriftCache is **OpenAI-compatible**, making it a drop-in replacement for existing LLM integrations. Just change your `base_url` to start caching responses and reducing costs.
+
+### Live Demo
+
+Try our hosted instance:
+- **API URL**: `https://driftcache-api-production.up.railway.app/api/v1`
+- **Dashboard**: https://frontend-kavinsaravan-1858s-projects.vercel.app
+- **Supported Models**: `claude-sonnet-5`, `claude-3-opus`, `claude-3-sonnet`, `claude-3-haiku`
+
+### Quick Integration
+
+#### Python (OpenAI SDK)
+
+```python
+from openai import OpenAI
+
+# Just point to DriftCache instead of OpenAI
+client = OpenAI(
+    base_url="https://driftcache-api-production.up.railway.app/api/v1",
+    api_key="dummy"  # Not required, but SDK expects it
+)
+
+response = client.chat.completions.create(
+    model="claude-sonnet-5",
+    messages=[
+        {"role": "user", "content": "What is machine learning?"}
+    ]
+)
+
+print(response.choices[0].message.content)
+print(f"Cache hit: {response.cache_hit}")  # Check if response was cached
+```
+
+#### JavaScript/TypeScript
+
+```javascript
+import OpenAI from 'openai';
+
+const client = new OpenAI({
+  baseURL: "https://driftcache-api-production.up.railway.app/api/v1",
+  apiKey: "dummy"
+});
+
+const response = await client.chat.completions.create({
+  model: "claude-sonnet-5",
+  messages: [
+    { role: "user", content: "Explain quantum computing" }
+  ]
+});
+
+console.log(response.choices[0].message.content);
+console.log(`Cache hit: ${response.cache_hit}`);
+```
+
+#### cURL
+
+```bash
+curl https://driftcache-api-production.up.railway.app/api/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-5",
+    "messages": [
+      {"role": "user", "content": "What is Python?"}
+    ]
+  }'
+```
+
+### Framework Integration
+
+#### LangChain
+
+```python
+from langchain_openai import ChatOpenAI
+
+llm = ChatOpenAI(
+    base_url="https://driftcache-api-production.up.railway.app/api/v1",
+    model="claude-sonnet-5",
+    api_key="dummy"
+)
+
+response = llm.invoke("Explain semantic caching")
+print(response.content)
+```
+
+#### LlamaIndex
+
+```python
+from llama_index.llms.openai import OpenAI
+
+llm = OpenAI(
+    api_base="https://driftcache-api-production.up.railway.app/api/v1",
+    model="claude-sonnet-5",
+    api_key="dummy"
+)
+
+response = llm.complete("What is vector search?")
+print(response.text)
+```
+
+### Understanding Cache Behavior
+
+DriftCache uses **semantic similarity** to match queries:
+
+```python
+# These queries will likely hit the same cache entry:
+queries = [
+    "What is Python?",
+    "Can you explain what Python is?",
+    "Tell me about the Python programming language"
+]
+
+# First request → Cache MISS (calls Claude)
+response1 = client.chat.completions.create(
+    model="claude-sonnet-5",
+    messages=[{"role": "user", "content": queries[0]}]
+)
+# response1.cache_hit = False
+
+# Second/third requests → Cache HIT (instant, no LLM call)
+response2 = client.chat.completions.create(
+    model="claude-sonnet-5",
+    messages=[{"role": "user", "content": queries[1]}]
+)
+# response2.cache_hit = True (saved ~$0.001)
+```
+
+### View Your Metrics
+
+After making requests, view real-time analytics at:
+**https://frontend-kavinsaravan-1858s-projects.vercel.app**
+
+You'll see:
+- Total requests and cache hit rate
+- Cost savings and LLM calls avoided
+- Average latency improvements
+- Recent requests timeline
+
+### Streaming Support
+
+DriftCache supports streaming responses:
+
+```python
+response = client.chat.completions.create(
+    model="claude-sonnet-5",
+    messages=[{"role": "user", "content": "Write a poem"}],
+    stream=True
+)
+
+for chunk in response:
+    if chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end="")
+```
+
+### Benefits
+
+- **Reduce Costs**: Cache hits avoid LLM API calls (save ~$0.001-0.01 per request)
+- **Improve Latency**: Cached responses return in ~50ms vs 2-5 seconds for LLM calls
+- **Semantic Matching**: Paraphrased queries hit the same cache (not just exact matches)
+- **OpenAI Compatible**: Works with any tool/framework that supports OpenAI API
+
 ## Demo Scenarios
 
 Run scripted demos showcasing all capabilities:

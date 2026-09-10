@@ -80,8 +80,9 @@ class ClaudeProvider:
             "top_p": top_p,
             "messages": claude_messages,
         }
+        # Format system prompt as array of content blocks if present
         if system_prompt:
-            api_params["system"] = system_prompt
+            api_params["system"] = [{"type": "text", "text": system_prompt}]
 
         # Call Claude API
         response: ClaudeMessage = await self.client.messages.create(**api_params)
@@ -144,8 +145,9 @@ class ClaudeProvider:
             "top_p": top_p,
             "messages": claude_messages,
         }
+        # Format system prompt as array of content blocks if present
         if system_prompt:
-            stream_params["system"] = system_prompt
+            stream_params["system"] = [{"type": "text", "text": system_prompt}]
 
         # Stream from Claude API
         async with self.client.messages.stream(**stream_params) as stream:

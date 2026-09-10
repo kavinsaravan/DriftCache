@@ -17,6 +17,7 @@ from app.models.schemas import (
     ChatCompletionResponse,
     ChatCompletionChoice,
     Message,
+    ChatMessage,
     UsageInfo,
     ErrorResponse,
     ErrorDetail,
@@ -130,7 +131,7 @@ async def create_chat_completion(request: ChatCompletionRequest) -> Union[ChatCo
                     choices=[
                         ChatCompletionChoice(
                             index=0,
-                            message=Message(
+                            message=ChatMessage(
                                 role="assistant",
                                 content=cached.response_text
                             ),

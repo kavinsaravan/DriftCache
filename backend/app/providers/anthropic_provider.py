@@ -98,15 +98,23 @@ class AnthropicProvider(BaseProvider):
         claude_model = self._map_model(model)
         system_prompt, claude_messages = self._convert_messages(messages)
 
+        # Build API parameters
+        api_params = {
+            "model": claude_model,
+            "max_tokens": max_tokens or 1024,
+            "messages": claude_messages,
+        }
+        # Temperature and top_p are deprecated for newer models (Sonnet 5+)
+        # Only include for older models
+        if not claude_model.startswith(("claude-sonnet-5", "claude-opus-5", "claude-fable-", "claude-haiku-4.5", "claude-haiku-5")):
+            api_params["temperature"] = temperature
+            api_params["top_p"] = top_p
+        # Only include system parameter if it has a value
+        if system_prompt:
+            api_params["system"] = [{"type": "text", "text": system_prompt}]
+
         # Call Claude API
-        response: ClaudeMessage = await self.client.messages.create(
-            model=claude_model,
-            max_tokens=max_tokens or 1024,
-            temperature=temperature,
-            top_p=top_p,
-            system=system_prompt if system_prompt else None,
-            messages=claude_messages,
-        )
+        response: ClaudeMessage = await self.client.messages.create(**api_params)
 
         # Convert to OpenAI format
         completion_id = f"chatcmpl-{int(time.time())}"
@@ -161,15 +169,23 @@ class AnthropicProvider(BaseProvider):
         completion_id = f"chatcmpl-{int(time.time())}"
         created_time = int(time.time())
 
+        # Build API parameters
+        stream_params = {
+            "model": claude_model,
+            "max_tokens": max_tokens or 1024,
+            "messages": claude_messages,
+        }
+        # Temperature and top_p are deprecated for newer models (Sonnet 5+)
+        # Only include for older models
+        if not claude_model.startswith(("claude-sonnet-5", "claude-opus-5", "claude-fable-", "claude-haiku-4.5", "claude-haiku-5")):
+            stream_params["temperature"] = temperature
+            stream_params["top_p"] = top_p
+        # Only include system parameter if it has a value
+        if system_prompt:
+            stream_params["system"] = [{"type": "text", "text": system_prompt}]
+
         # Stream from Claude API
-        async with self.client.messages.stream(
-            model=claude_model,
-            max_tokens=max_tokens or 1024,
-            temperature=temperature,
-            top_p=top_p,
-            system=system_prompt if system_prompt else None,
-            messages=claude_messages,
-        ) as stream:
+        async with self.client.messages.stream(**stream_params) as stream:
 
             # Send initial chunk with role
             initial_chunk = ChatCompletionStreamResponse(
