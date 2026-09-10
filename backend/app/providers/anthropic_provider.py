@@ -102,10 +102,13 @@ class AnthropicProvider(BaseProvider):
         api_params = {
             "model": claude_model,
             "max_tokens": max_tokens or 1024,
-            "temperature": temperature,
-            "top_p": top_p,
             "messages": claude_messages,
         }
+        # Temperature and top_p are deprecated for newer models (Sonnet 5+)
+        # Only include for older models
+        if not claude_model.startswith(("claude-sonnet-5", "claude-opus-5", "claude-fable-", "claude-haiku-4.5", "claude-haiku-5")):
+            api_params["temperature"] = temperature
+            api_params["top_p"] = top_p
         # Only include system parameter if it has a value
         if system_prompt:
             api_params["system"] = [{"type": "text", "text": system_prompt}]
@@ -170,10 +173,13 @@ class AnthropicProvider(BaseProvider):
         stream_params = {
             "model": claude_model,
             "max_tokens": max_tokens or 1024,
-            "temperature": temperature,
-            "top_p": top_p,
             "messages": claude_messages,
         }
+        # Temperature and top_p are deprecated for newer models (Sonnet 5+)
+        # Only include for older models
+        if not claude_model.startswith(("claude-sonnet-5", "claude-opus-5", "claude-fable-", "claude-haiku-4.5", "claude-haiku-5")):
+            stream_params["temperature"] = temperature
+            stream_params["top_p"] = top_p
         # Only include system parameter if it has a value
         if system_prompt:
             stream_params["system"] = [{"type": "text", "text": system_prompt}]

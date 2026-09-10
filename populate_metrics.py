@@ -45,7 +45,7 @@ def send_request(prompt, request_num):
     print(f"\n[{request_num}/{len(PROMPTS)}] Sending: {prompt[:50]}...")
 
     payload = {
-        "model": "claude-3-5-sonnet-20241022",
+        "model": "claude-sonnet-5",
         "messages": [
             {
                 "role": "user",
