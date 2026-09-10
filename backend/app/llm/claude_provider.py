@@ -72,15 +72,19 @@ class ClaudeProvider:
         claude_model = self._map_model(model)
         system_prompt, claude_messages = self._convert_messages(messages)
 
+        # Build API parameters
+        api_params = {
+            "model": claude_model,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "top_p": top_p,
+            "messages": claude_messages,
+        }
+        if system_prompt:
+            api_params["system"] = system_prompt
+
         # Call Claude API
-        response: ClaudeMessage = await self.client.messages.create(
-            model=claude_model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            top_p=top_p,
-            system=system_prompt if system_prompt else None,
-            messages=claude_messages,
-        )
+        response: ClaudeMessage = await self.client.messages.create(**api_params)
 
         # Convert to OpenAI format
         completion_id = f"chatcmpl-{int(time.time())}"
@@ -132,15 +136,19 @@ class ClaudeProvider:
         completion_id = f"chatcmpl-{int(time.time())}"
         created_time = int(time.time())
 
+        # Build API parameters
+        stream_params = {
+            "model": claude_model,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "top_p": top_p,
+            "messages": claude_messages,
+        }
+        if system_prompt:
+            stream_params["system"] = system_prompt
+
         # Stream from Claude API
-        async with self.client.messages.stream(
-            model=claude_model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            top_p=top_p,
-            system=system_prompt if system_prompt else None,
-            messages=claude_messages,
-        ) as stream:
+        async with self.client.messages.stream(**stream_params) as stream:
 
             # Send initial chunk with role
             initial_chunk = ChatCompletionStreamResponse(
