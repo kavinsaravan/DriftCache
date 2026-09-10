@@ -17,6 +17,7 @@ from app.models.schemas import (
     ChatCompletionResponse,
     ChatCompletionChoice,
     Message,
+    ChatMessage,
     UsageInfo,
     ErrorResponse,
     ErrorDetail,
