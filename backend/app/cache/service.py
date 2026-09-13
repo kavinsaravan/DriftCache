@@ -3,12 +3,10 @@ Cache Service
 
 Orchestrates the complete semantic caching flow:
 1. Generate embedding
-2. Search FAISS
-3. Evaluate match
+2. Search FAISS vector index
+3. Evaluate match quality
 4. Return cached response or miss
-5. Store new responses
-
-Week 3 Update: Now uses Redis for online serving layer
+5. Store new responses in Redis and PostgreSQL
 """
 import logging
 from typing import Optional, List
@@ -159,9 +157,8 @@ class CacheService:
 
         # Record statistics
         if decision_result.is_hit():
-            # Record hit in both stores
+            # Record hit in Redis (primary metrics store)
             await self.redis_store.increment_cache_hit(cached_response.cache_id)
-            self.cache_store.record_hit(cached_response.cache_id)
 
             # Record similarity score
             if similarity:
@@ -174,10 +171,8 @@ class CacheService:
                 f"cache_id={cached_response.cache_id[:8]}..."
             )
         else:
-            # Record miss
+            # Record miss in Redis (primary metrics store)
             await self.redis_store.increment_cache_miss()
-            miss_type = self._get_miss_type(decision_result.decision)
-            self.cache_store.record_miss(miss_type)
 
             logger.info(
                 f"✗ CACHE MISS: {decision_result.reason}, "
@@ -316,19 +311,6 @@ class CacheService:
             model_name=model_name,
             tenant_id=tenant_id
         )
-
-    def _get_miss_type(self, decision: CacheDecision) -> str:
-        """Map decision to miss type for statistics"""
-        if decision == CacheDecision.THRESHOLD_NOT_MET:
-            return "threshold"
-        elif decision == CacheDecision.MODEL_MISMATCH:
-            return "model"
-        elif decision == CacheDecision.SYSTEM_MISMATCH:
-            return "system"
-        elif decision == CacheDecision.EXPIRED:
-            return "expired"
-        else:
-            return "general"
 
     async def get_stats(self) -> dict:
         """

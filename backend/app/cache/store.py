@@ -1,10 +1,8 @@
 """
 Cache Store
 
-Stores cached prompt-response pairs.
-
-For Week 2 MVP: Simple in-memory + JSON persistence
-For Production: Redis (hot) + PostgreSQL (cold)
+In-memory cache store with JSON persistence for cached prompt-response pairs.
+Works alongside Redis for hot storage and PostgreSQL for cold storage.
 """
 import json
 import logging

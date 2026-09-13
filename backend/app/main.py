@@ -1,10 +1,11 @@
 """
 Main FastAPI application entry point
 
-Week 3 Updates:
+Features:
 - Redis lifecycle management
 - PostgreSQL database initialization
 - Historical event recording
+- OpenAI-compatible API endpoints
 """
 import logging
 from contextlib import asynccontextmanager

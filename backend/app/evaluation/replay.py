@@ -81,7 +81,7 @@ class CacheDecisionReplayer:
 
         # Determine new decision
         original_decision = event.cache_status.value
-        new_decision = self._evaluate_threshold(event, new_threshold)
+        new_decision = self._apply_threshold_to_event(event, new_threshold)
 
         return {
             "cache_event_id": cache_event_id,
@@ -146,7 +146,7 @@ class CacheDecisionReplayer:
 
         for event in events:
             original_decision = event.cache_status.value
-            new_decision = self._evaluate_threshold(event, new_threshold)
+            new_decision = self._apply_threshold_to_event(event, new_threshold)
 
             if original_decision != new_decision:
                 if original_decision == "HIT" and new_decision in ["MISS", "THRESHOLD_NOT_MET"]:
@@ -192,26 +192,26 @@ class CacheDecisionReplayer:
             "events": results[:100]  # First 100 for details
         }
 
-    def _evaluate_threshold(
+    def _apply_threshold_to_event(
         self,
         event: CacheEvent,
         threshold: float
     ) -> str:
         """
-        Evaluate what decision would have been made with new threshold
+        Apply a threshold to a single event and determine decision
 
         Args:
             event: Original cache event
-            threshold: New threshold
+            threshold: New threshold to apply
 
         Returns:
-            Decision status string
+            Decision status string (HIT or THRESHOLD_NOT_MET)
         """
         # If no similarity score, keep original decision
         if event.similarity_score is None:
             return event.cache_status.value
 
-        # Evaluate threshold
+        # Apply threshold
         if event.similarity_score >= threshold:
             return "HIT"
         else:

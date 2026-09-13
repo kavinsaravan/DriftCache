@@ -231,7 +231,7 @@ class MetricsCollector:
         """
         Estimate cost for a provider call
 
-        Simplified pricing model for MVP
+        Simplified pricing model based on approximate token costs
 
         Args:
             model: Model name

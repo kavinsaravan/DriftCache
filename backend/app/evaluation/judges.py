@@ -168,7 +168,7 @@ class LLMJudge:
         """
         raise NotImplementedError(
             "LLMJudge requires LLM API integration. "
-            "Use RuleBasedJudge for MVP."
+            "Use RuleBasedJudge instead."
         )
 
 

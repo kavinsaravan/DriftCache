@@ -116,11 +116,11 @@ class IndexStats(BaseModel):
     last_updated: Optional[datetime] = None
 
 
-class CacheEntry(BaseModel):
+class SearchResult(BaseModel):
     """
-    Complete cache entry (vector + metadata + response)
+    Vector search result with metadata and response
 
-    This is what gets returned to the cache decision layer
+    Represents a single result from FAISS vector similarity search
     """
     vector_id: int
     prompt_id: str
