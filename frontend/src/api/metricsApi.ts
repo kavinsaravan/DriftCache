@@ -18,13 +18,6 @@ import {
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA === 'true';
 
-// Debug logging
-console.log('[DriftCache] Environment:', {
-  API_BASE_URL,
-  VITE_USE_MOCK_DATA: import.meta.env.VITE_USE_MOCK_DATA,
-  USE_MOCK_DATA,
-});
-
 const metricsApi = axios.create({
   baseURL: `${API_BASE_URL}/metrics`,
   headers: {
@@ -235,7 +228,6 @@ export const getTimeSeries = async (
 export const getDashboardData = async (period: string = '24h', tenantId?: string): Promise<DashboardData> => {
   // Use mock data if enabled or if backend fails
   if (USE_MOCK_DATA) {
-    console.log('Using mock data for demo');
     return Promise.resolve(mockDashboardData);
   }
 

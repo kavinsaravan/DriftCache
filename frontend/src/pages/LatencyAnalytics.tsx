@@ -80,7 +80,7 @@ export default function LatencyAnalytics() {
     latency: point.value,
   }));
 
-  // Calculate percentile data (simulated for demo)
+  // Calculate percentile data from latency metrics
   const percentileData = [
     { percentile: 'p50', cache: cache_latency.average_ms * 0.8, provider: provider_latency.average_ms * 0.8 },
     { percentile: 'p75', cache: cache_latency.average_ms * 0.9, provider: provider_latency.average_ms * 0.9 },

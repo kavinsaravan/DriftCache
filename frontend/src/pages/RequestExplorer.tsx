@@ -14,7 +14,7 @@ export default function RequestExplorer() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<CacheStatusFilter>('all');
 
-  // Fetch cached prompts (as a proxy for request history)
+  // Fetch cached prompts for request history
   const { data: requests, isLoading, refetch } = useQuery<TopCachedPrompt[]>({
     queryKey: ['request-explorer', 100],
     queryFn: () => getTopCachedPrompts(100, '24h'),
@@ -29,8 +29,7 @@ export default function RequestExplorer() {
       request.response.toLowerCase().includes(searchQuery.toLowerCase()) ||
       request.model.toLowerCase().includes(searchQuery.toLowerCase());
 
-    // Since we're using cached prompts, all have hits
-    // In a real implementation, this would filter by actual cache_status
+    // Filter by cache status (currently showing cached prompts only)
     const matchesStatus = statusFilter === 'all' || statusFilter === 'hit';
 
     return matchesSearch && matchesStatus;

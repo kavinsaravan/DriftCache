@@ -62,7 +62,7 @@ export default function Layout() {
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200">
           <div className="text-xs text-gray-500">
             <p className="font-medium">Adaptive Semantic Caching</p>
-            <p className="mt-1">Week 4: Analytics Dashboard</p>
+            <p className="mt-1">Analytics Dashboard</p>
           </div>
         </div>
       </div>
