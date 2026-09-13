@@ -37,25 +37,43 @@ DriftCache/
 │   │   │   ├── threshold_optimizer.py
 │   │   │   ├── index_rebuild_agent.py
 │   │   │   └── supervisor.py
+│   │   ├── providers/               # LLM provider integrations
+│   │   │   ├── anthropic_provider.py
+│   │   │   ├── openai_provider.py
+│   │   │   └── router.py
 │   │   ├── training/                # Fine-tuning pipeline
 │   │   │   ├── data_generator.py   # Training data collection
 │   │   │   ├── trainer.py          # PyTorch training
 │   │   │   └── evaluator.py        # Model evaluation
 │   │   ├── optimization/            # Multi-objective scoring
 │   │   ├── vectorstore/             # FAISS index management
-│   │   └── models/                  # 18+ SQLAlchemy models
-│   ├── alembic/versions/            # 9 database migrations
+│   │   ├── cache/                   # Cache decision engine
+│   │   ├── embeddings/              # Embedding service
+│   │   └── models/                  # SQLAlchemy models
+│   ├── alembic/versions/            # Database migrations
+│   ├── data/cache/                  # FAISS index & metadata
 │   └── Dockerfile
 ├── frontend/
-│   ├── src/components/              # React dashboard
+│   ├── src/
+│   │   ├── components/              # React components
+│   │   ├── pages/                   # Dashboard pages
+│   │   └── api/                     # API integration
 │   └── Dockerfile
 ├── benchmarks/
 │   ├── semantic_cache_benchmark.py
 │   ├── load_test.py
-│   └── datasets/                    # 3 test datasets
-├── demo/
-│   ├── run_demo.py                  # Interactive demos
-│   └── prompts/                     # Demo datasets
+│   ├── datasets/                    # Test datasets
+│   └── results/                     # Benchmark results
+├── scripts/
+│   ├── populate_metrics.py          # Populate dashboard with test data
+│   ├── demo/                        # Interactive demos
+│   │   ├── run_demo.py
+│   │   └── prompts/
+│   └── smoke_test.sh
+├── tests/
+│   ├── test_cache_performance.py
+│   ├── test_production_api.py
+│   └── quick_test.sh
 └── docker-compose.yml
 ```
 
