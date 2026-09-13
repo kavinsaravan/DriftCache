@@ -116,11 +116,11 @@ class IndexStats(BaseModel):
     last_updated: Optional[datetime] = None
 
 
-class SearchResult(BaseModel):
+class CacheEntry(BaseModel):
     """
-    Vector search result with metadata and response
+    Complete cache entry returned from vector search
 
-    Represents a single result from FAISS vector similarity search
+    Represents a cached response retrieved from FAISS similarity search
     """
     vector_id: int
     prompt_id: str
