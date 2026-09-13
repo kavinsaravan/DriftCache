@@ -1,13 +1,6 @@
-# Railway Deployment Guide
+# Deployment Guide
 
-## Why Railway?
-- **$5/month free credit** (usually enough for hobby projects)
-- **Better free tier**: More RAM than Render's 512MB
-- **Built-in PostgreSQL + Redis**
-- **Shell access included**
-- **Similar workflow to Render**
-
-## Step-by-Step Deployment
+## Part 2: Deploy Backend to Railway
 
 ### 1. Create Railway Account
 1. Go to https://railway.app
