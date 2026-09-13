@@ -8,7 +8,9 @@ import json
 from pathlib import Path
 
 # Load the example benchmark results
-results_file = Path("/Users/kavins/Projects/DriftCache/benchmarks/results/example_benchmark_results.json")
+script_dir = Path(__file__).parent
+project_root = script_dir.parent
+results_file = project_root / "benchmarks" / "results" / "example_benchmark_results.json"
 
 with open(results_file) as f:
     results = json.load(f)
