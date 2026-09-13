@@ -74,3 +74,6 @@ dump.rdb
 # OS
 .DS_Store
 Thumbs.db
+
+# Deployment docs (keep locally only)
+DEPLOYMENT.md
