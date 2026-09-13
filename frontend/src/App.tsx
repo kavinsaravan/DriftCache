@@ -12,7 +12,6 @@ import LatencyAnalytics from './pages/LatencyAnalytics';
 import CostSavings from './pages/CostSavings';
 import RequestExplorer from './pages/RequestExplorer';
 import Settings from './pages/Settings';
-import './App.css';
 
 // Create React Query client
 const queryClient = new QueryClient({
