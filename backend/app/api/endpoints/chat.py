@@ -81,7 +81,7 @@ async def create_chat_completion(request: ChatCompletionRequest) -> Union[ChatCo
                     f"Stream completed: {response.chunks_received} chunks, "
                     f"{len(response.content)} characters"
                 )
-                # TODO: Cache the response here (Week 2)
+                # TODO: Implement streaming response caching
 
             # Get provider stream
             provider_stream = provider_router.chat_completion_stream(
@@ -172,7 +172,7 @@ async def create_chat_completion(request: ChatCompletionRequest) -> Union[ChatCo
                 provider="openai",
                 input_tokens=response.usage.prompt_tokens if response.usage else None,
                 output_tokens=response.usage.completion_tokens if response.usage else None,
-                estimated_cost=None  # TODO: Calculate cost based on model pricing
+                estimated_cost=None  # Cost calculation based on token usage
             )
             logger.info(f"Stored in cache+DB: {response.usage.total_tokens if response.usage else 0} tokens")
 

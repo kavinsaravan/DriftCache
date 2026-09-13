@@ -37,7 +37,7 @@ class CacheService:
 
     Coordinates embedding, search, decision, and storage
 
-    Week 3 Update:
+    Architecture:
     - Redis for online serving (fast retrieval)
     - Legacy store for fallback
     """

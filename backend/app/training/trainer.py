@@ -79,7 +79,8 @@ class ContrastiveTrainer:
         self,
         db: Session,
         batch_size: int = 16,
-        max_seq_length: int = 128
+        max_seq_length: int = 128,
+        loss_function: str = "CosineSimilarityLoss"
     ) -> DataLoader:
         """
         Prepare training data from database
@@ -88,6 +89,7 @@ class ContrastiveTrainer:
             db: Database session
             batch_size: Training batch size
             max_seq_length: Maximum sequence length
+            loss_function: Loss function to be used (affects data format)
 
         Returns:
             DataLoader for training
@@ -103,6 +105,9 @@ class ContrastiveTrainer:
         logger.info(f"Loaded {len(training_pairs)} training pairs")
 
         # Convert to InputExample format
+        # NOTE: Different losses require different data formats:
+        # - MultipleNegativesRankingLoss: Only positive pairs (uses in-batch negatives)
+        # - CosineSimilarityLoss/ContrastiveLoss: Both positive and negative pairs with labels
         train_examples = []
 
         for pair in training_pairs:
@@ -115,12 +120,15 @@ class ContrastiveTrainer:
                 train_examples.append(example)
 
             # For negative pairs: (anchor, negative, label=0.0)
+            # Only include negatives for losses that use explicit negative labels
             elif pair.pair_type in [PairType.HARD_NEGATIVE, PairType.EASY_NEGATIVE]:
-                example = InputExample(
-                    texts=[pair.anchor_text, pair.comparison_text],
-                    label=0.0  # Dissimilar
-                )
-                train_examples.append(example)
+                # Skip negatives for MNRL (it uses in-batch negatives instead)
+                if loss_function != "MultipleNegativesRankingLoss":
+                    example = InputExample(
+                        texts=[pair.anchor_text, pair.comparison_text],
+                        label=0.0  # Dissimilar
+                    )
+                    train_examples.append(example)
 
         logger.info(f"Created {len(train_examples)} training examples")
 
@@ -398,7 +406,8 @@ class TrainingJobManager:
             train_dataloader = trainer.prepare_training_data(
                 db=self.db,
                 batch_size=config.batch_size,
-                max_seq_length=config.max_seq_length
+                max_seq_length=config.max_seq_length,
+                loss_function=config.loss_function
             )
 
             # Train

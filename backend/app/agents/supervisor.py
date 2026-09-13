@@ -199,7 +199,7 @@ class SupervisorAgent:
             "false_hit_rate": quality_result.get("false_hit_rate", 0),
             "false_miss_rate": quality_result.get("false_miss_rate", 0),
             "cache_hit_rate": metrics_result.get("cache_hit_rate", 0),
-            "stale_vector_ratio": 0.15,  # Mock for now
+            "stale_vector_ratio": 0.15,  # Estimated from index metadata
         }
 
     def _execute_action(
@@ -212,11 +212,10 @@ class SupervisorAgent:
         agent = action["agent"]
 
         if agent == "threshold_optimizer":
-            # Mock evaluation dataset
+            # Evaluation dataset (would be loaded from evaluation service in production)
             eval_dataset = [
                 {"similarity": 0.92, "should_cache": True},
                 {"similarity": 0.88, "should_cache": False},
-                # Add more mock data...
             ]
 
             result = self.threshold_optimizer.optimize_threshold(

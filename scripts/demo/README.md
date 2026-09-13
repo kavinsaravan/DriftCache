@@ -2,10 +2,6 @@
 
 This directory contains scripted demo scenarios that showcase DriftCache's capabilities through concrete examples.
 
-## Overview
-
-The demos tell a story: **DriftCache reduces LLM cost and latency through semantic caching, detects when semantic behavior changes, and uses autonomous agents to optimize retrieval quality automatically.**
-
 ## Quick Start
 
 ```bash
@@ -243,27 +239,6 @@ python demo/generate_drift.py all
 open http://localhost
 ```
 
-## Demo Tips
-
-### For Technical Interviews
-Focus on Scenarios 1, 4, 5:
-- Scenario 1: Shows you understand the business value
-- Scenario 4: Shows you understand autonomous systems
-- Scenario 5: Shows you understand production infrastructure
-
-### For Resume Bullets
-Use concrete numbers from demos:
-- "68% cache hit rate reducing LLM costs"
-- "9ms p95 latency, 143x faster than provider calls"
-- "Autonomous agents optimize thresholds without human intervention"
-- "Self-healing vector index rebuilds on degradation"
-
-### For Explaining to Non-Technical People
-Use Scenario 1 only:
-- "It's like autocomplete for AI questions"
-- "Recognizes paraphrased questions and reuses answers"
-- "Saves money and makes responses faster"
-
 ## Dashboard Views
 
 When running demos, watch the dashboard for:
@@ -282,25 +257,3 @@ When running demos, watch the dashboard for:
 - Supervisor run history
 - Threshold optimization actions
 - Index rebuild jobs
-
-## Troubleshooting
-
-**"Connection refused"**
-- Ensure DriftCache is running: `docker compose up -d`
-- Check API is accessible: `curl http://localhost:8000/status`
-
-**"No drift detected"**
-- Run seed_cache.py first to establish baseline
-- Drift detection requires embedding model to be configured
-
-**"Demos run but dashboard shows no data"**
-- Check backend logs: `docker compose logs backend`
-- Verify database migrations ran: `docker exec driftcache-backend alembic current`
-
-## Next Steps
-
-After running demos:
-1. Review the metrics in the dashboard
-2. Check benchmark results: `python benchmarks/semantic_cache_benchmark.py`
-3. Explore the API: `open http://localhost:8000/docs`
-4. Read architecture docs: `docs/architecture.md`
