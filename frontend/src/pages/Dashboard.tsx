@@ -214,7 +214,7 @@ export default function Dashboard() {
           </h2>
         </div>
         <div className="space-y-3">
-          {top_cached_prompts.slice(0, 5).map((prompt, index) => (
+          {top_cached_prompts.slice(0, 5).map((prompt) => (
             <div
               key={prompt.cache_id}
               className="group relative border border-gray-200/50 rounded-xl p-4 hover:border-purple-300 hover:shadow-lg hover:shadow-purple-100/50 transition-all duration-200"
