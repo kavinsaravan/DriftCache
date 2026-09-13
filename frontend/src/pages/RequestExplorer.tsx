@@ -7,6 +7,8 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search, Filter, Download, RefreshCw } from 'lucide-react';
 import { getTopCachedPrompts, TopCachedPrompt } from '../api/metricsApi';
+import LoadingSpinner from '../components/LoadingSpinner';
+import { REFETCH_INTERVALS } from '../utils/constants';
 
 type CacheStatusFilter = 'all' | 'hit' | 'miss';
 
@@ -18,7 +20,7 @@ export default function RequestExplorer() {
   const { data: requests, isLoading, refetch } = useQuery<TopCachedPrompt[]>({
     queryKey: ['request-explorer', 100],
     queryFn: () => getTopCachedPrompts(100, '24h'),
-    refetchInterval: 30000,
+    refetchInterval: REFETCH_INTERVALS.FAST,
   });
 
   // Filter requests based on search and status
@@ -60,14 +62,7 @@ export default function RequestExplorer() {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading requests...</p>
-        </div>
-      </div>
-    );
+    return <LoadingSpinner message="Loading requests..." />;
   }
 
   return (

@@ -24,31 +24,26 @@ import {
   TimeSeriesDataPoint,
 } from '../api/metricsApi';
 import MetricCard from '../components/MetricCard';
+import LoadingSpinner from '../components/LoadingSpinner';
+import { REFETCH_INTERVALS } from '../utils/constants';
 
 export default function LatencyAnalytics() {
   // Fetch latency statistics
   const { data: latencyStats, isLoading } = useQuery<LatencyStats>({
     queryKey: ['latency-stats', '24h'],
     queryFn: () => getLatencyStats('24h'),
-    refetchInterval: 30000,
+    refetchInterval: REFETCH_INTERVALS.FAST,
   });
 
   // Fetch latency time series
   const { data: latencyTimeSeries } = useQuery<TimeSeriesDataPoint[]>({
     queryKey: ['timeseries', 'latency', '24h'],
     queryFn: () => getTimeSeries('latency', '24h', '1h'),
-    refetchInterval: 60000,
+    refetchInterval: REFETCH_INTERVALS.NORMAL,
   });
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading latency metrics...</p>
-        </div>
-      </div>
-    );
+    return <LoadingSpinner message="Loading latency metrics..." />;
   }
 
   if (!latencyStats) return null;

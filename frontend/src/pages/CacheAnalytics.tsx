@@ -28,27 +28,28 @@ import {
   SimilarityDistribution,
   TopCachedPrompt,
 } from '../api/metricsApi';
+import { REFETCH_INTERVALS } from '../utils/constants';
 
 export default function CacheAnalytics() {
   // Fetch cache hit rate over time
   const { data: hitRateData } = useQuery<TimeSeriesDataPoint[]>({
     queryKey: ['timeseries', 'hit_rate', '24h'],
     queryFn: () => getTimeSeries('hit_rate', '24h', '1h'),
-    refetchInterval: 60000,
+    refetchInterval: REFETCH_INTERVALS.NORMAL,
   });
 
   // Fetch similarity distribution
   const { data: similarityDist } = useQuery<SimilarityDistribution>({
     queryKey: ['similarity-distribution', '24h'],
     queryFn: () => getSimilarityDistribution('24h', 10),
-    refetchInterval: 60000,
+    refetchInterval: REFETCH_INTERVALS.NORMAL,
   });
 
   // Fetch top cached prompts
   const { data: topPrompts } = useQuery<TopCachedPrompt[]>({
     queryKey: ['top-cached-prompts', 20],
     queryFn: () => getTopCachedPrompts(20, '24h'),
-    refetchInterval: 60000,
+    refetchInterval: REFETCH_INTERVALS.NORMAL,
   });
 
   // Prepare similarity distribution data for chart

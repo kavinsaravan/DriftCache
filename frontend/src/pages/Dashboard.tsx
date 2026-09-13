@@ -15,6 +15,9 @@ import {
 } from 'lucide-react';
 import { getDashboardData, DashboardData } from '../api/metricsApi';
 import MetricCard from '../components/MetricCard';
+import LoadingSpinner from '../components/LoadingSpinner';
+import { formatCurrency } from '../utils/formatting';
+import { REFETCH_INTERVALS } from '../utils/constants';
 import {
   BarChart,
   Bar,
@@ -32,18 +35,11 @@ export default function Dashboard() {
   const { data, isLoading, error } = useQuery<DashboardData>({
     queryKey: ['dashboard', '24h'],
     queryFn: () => getDashboardData('24h'),
-    refetchInterval: 30000, // Refetch every 30 seconds
+    refetchInterval: REFETCH_INTERVALS.FAST,
   });
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading metrics...</p>
-        </div>
-      </div>
-    );
+    return <LoadingSpinner message="Loading metrics..." />;
   }
 
   if (error) {
@@ -67,14 +63,6 @@ export default function Dashboard() {
 
   // Calculate hit rate percentage
   const hitRatePercent = Math.round((summary?.cache_hit_rate || 0) * 100);
-
-  // Format currency
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
-  };
 
   // Prepare similarity distribution data for chart
   const similarityData = Object.entries(similarity_distribution).map(([range, count]) => ({
