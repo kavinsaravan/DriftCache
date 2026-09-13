@@ -102,3 +102,83 @@ Check logs - migrations run automatically on startup via `main.py`
 - Free tier: $5/month credit
 - Typical usage for hobby project: $3-4/month
 - Way cheaper than Render Standard ($25/month)
+
+---
+
+## Part 2: Deploy Frontend to Vercel
+
+### Prerequisites
+
+- Vercel account (free tier available at https://vercel.com)
+- Backend deployed on Railway (from Part 1)
+
+### Step 1: Connect Repository to Vercel
+
+1. Go to https://vercel.com/new
+2. Click **Import Git Repository**
+3. Select your `DriftCache` repository from GitHub
+4. Vercel will detect it as a monorepo
+
+### Step 2: Configure Project Settings
+
+**Important**: Since this is a monorepo, configure the following:
+
+- **Framework Preset**: Vite
+- **Root Directory**: `frontend` (click "Edit" and select the frontend folder)
+- **Build Command**: `npm run build`
+- **Output Directory**: `dist`
+- **Install Command**: `npm install`
+
+### Step 3: Configure Environment Variables
+
+Add the backend API URL in the Environment Variables section:
+
+```
+VITE_API_URL=https://your-app.up.railway.app
+```
+
+**Note**: Replace with your actual Railway backend URL from Step 7 above.
+
+### Step 4: Deploy
+
+Click **Deploy** and Vercel will:
+- Install dependencies from `frontend/package.json`
+- Build your Vite + React app
+- Deploy to global CDN
+- Provide a production URL: `https://your-app.vercel.app`
+
+### Step 5: Update Backend CORS
+
+After deployment, update your backend's CORS settings to allow your Vercel domain:
+
+1. Go to Railway Dashboard → Your Service → Variables
+2. Add or update `VERCEL_DOMAIN` with your Vercel domain
+3. The CORS configuration in `backend/app/core/config.py` will automatically allow `https://*.vercel.app`
+
+### Step 6: Verify Deployment
+
+Visit your Vercel URL and verify:
+- Frontend loads successfully
+- Can connect to backend API
+- Dashboard displays metrics from the backend
+
+---
+
+## Troubleshooting Frontend
+
+### Build Errors on Vercel
+
+Check Vercel build logs for TypeScript or dependency errors.
+
+**Common fixes**:
+- Ensure all dependencies are in `frontend/package.json`
+- Verify TypeScript has no errors locally: `npm run build`
+
+### Frontend Can't Connect to Backend
+
+**Check CORS configuration**:
+- Verify `VERCEL_DOMAIN` environment variable in Railway
+- Ensure backend allows your Vercel domain
+
+**Check API URL**:
+- Verify `VITE_API_URL` in Vercel environment variables points to Railway backend
