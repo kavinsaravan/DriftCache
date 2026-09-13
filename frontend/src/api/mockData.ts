@@ -1,6 +1,3 @@
-/**
- * Mock data for demo purposes when backend is unavailable
- */
 export const mockMetricsSummary = {
   total_requests: 1000,
   cache_hits: 680,

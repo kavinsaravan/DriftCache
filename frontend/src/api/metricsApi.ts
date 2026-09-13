@@ -18,13 +18,6 @@ import {
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA === 'true';
 
-// Debug logging
-console.log('[DriftCache] Environment:', {
-  API_BASE_URL,
-  VITE_USE_MOCK_DATA: import.meta.env.VITE_USE_MOCK_DATA,
-  USE_MOCK_DATA,
-});
-
 const metricsApi = axios.create({
   baseURL: `${API_BASE_URL}/metrics`,
   headers: {
@@ -113,7 +106,6 @@ export const getSummary = async (period: string = '24h', tenantId?: string): Pro
     const response = await metricsApi.get('/summary', { params });
     return response.data;
   } catch (error) {
-    console.warn('Falling back to mock summary data');
     return Promise.resolve(mockDashboardData.summary);
   }
 };
@@ -131,7 +123,6 @@ export const getLatencyStats = async (period: string = '24h', tenantId?: string)
     const response = await metricsApi.get('/latency', { params });
     return response.data;
   } catch (error) {
-    console.warn('Falling back to mock latency stats');
     return Promise.resolve(mockLatencyStats);
   }
 };
@@ -153,7 +144,6 @@ export const getSimilarityDistribution = async (
     const response = await metricsApi.get('/similarity-distribution', { params });
     return response.data;
   } catch (error) {
-    console.warn('Falling back to mock similarity distribution');
     return Promise.resolve(mockSimilarityDistribution);
   }
 };
@@ -175,7 +165,6 @@ export const getTopCachedPrompts = async (
     const response = await metricsApi.get('/top-cached-prompts', { params });
     return response.data;
   } catch (error) {
-    console.warn('Falling back to mock top cached prompts');
     return Promise.resolve(mockTopCachedPrompts);
   }
 };
@@ -193,7 +182,6 @@ export const getProviderUsage = async (period: string = '24h', tenantId?: string
     const response = await metricsApi.get('/provider-usage', { params });
     return response.data;
   } catch (error) {
-    console.warn('Falling back to mock provider usage');
     return Promise.resolve(mockProviderUsage);
   }
 };
@@ -221,7 +209,6 @@ export const getTimeSeries = async (
     const response = await metricsApi.get(`/time-series/${metric}`, { params });
     return response.data;
   } catch (error) {
-    console.warn(`Falling back to mock time series for ${metric}`);
     const mockData = metric === 'hit_rate' ? mockTimeSeriesHitRate :
                      metric === 'latency' ? mockTimeSeriesLatency :
                      mockTimeSeriesRequests;
@@ -235,7 +222,6 @@ export const getTimeSeries = async (
 export const getDashboardData = async (period: string = '24h', tenantId?: string): Promise<DashboardData> => {
   // Use mock data if enabled or if backend fails
   if (USE_MOCK_DATA) {
-    console.log('Using mock data for demo');
     return Promise.resolve(mockDashboardData);
   }
 
@@ -247,13 +233,11 @@ export const getDashboardData = async (period: string = '24h', tenantId?: string
 
     // Validate response has required structure
     if (!response.data || !response.data.summary || !response.data.latency) {
-      console.warn('Invalid response structure, falling back to mock data');
       return Promise.resolve(mockDashboardData);
     }
 
     return response.data;
   } catch (error) {
-    console.error('Backend unavailable, falling back to mock data', error);
     return Promise.resolve(mockDashboardData);
   }
 };

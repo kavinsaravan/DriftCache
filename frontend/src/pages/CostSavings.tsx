@@ -25,42 +25,30 @@ import {
   ProviderUsage,
 } from '../api/metricsApi';
 import MetricCard from '../components/MetricCard';
+import LoadingSpinner from '../components/LoadingSpinner';
+import { formatCurrency } from '../utils/formatting';
+import { REFETCH_INTERVALS } from '../utils/constants';
 
 export default function CostSavings() {
   // Fetch summary metrics
   const { data: summary, isLoading } = useQuery<MetricsSummary>({
     queryKey: ['summary', '24h'],
     queryFn: () => getSummary('24h'),
-    refetchInterval: 30000,
+    refetchInterval: REFETCH_INTERVALS.FAST,
   });
 
   // Fetch provider usage
   const { data: providerUsage } = useQuery<ProviderUsage>({
     queryKey: ['provider-usage', '24h'],
     queryFn: () => getProviderUsage('24h'),
-    refetchInterval: 60000,
+    refetchInterval: REFETCH_INTERVALS.NORMAL,
   });
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading cost metrics...</p>
-        </div>
-      </div>
-    );
+    return <LoadingSpinner message="Loading cost metrics..." />;
   }
 
   if (!summary) return null;
-
-  // Format currency
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
-  };
 
   // Calculate total cost if no cache
   const totalCostWithoutCache = summary.estimated_cost_saved_usd +

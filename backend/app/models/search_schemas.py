@@ -118,9 +118,9 @@ class IndexStats(BaseModel):
 
 class CacheEntry(BaseModel):
     """
-    Complete cache entry (vector + metadata + response)
+    Complete cache entry returned from vector search
 
-    This is what gets returned to the cache decision layer
+    Represents a cached response retrieved from FAISS similarity search
     """
     vector_id: int
     prompt_id: str

@@ -55,7 +55,7 @@ class FAISSIndex:
         """
         Create a new FAISS index
 
-        For MVP, we use IndexFlatL2 (exact search, no training needed)
+        Uses IndexFlatL2 for exact search with L2 distance (no training required)
         """
         if self.index_type.lower() == "flat":
             # Exact search using L2 distance

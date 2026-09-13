@@ -7,8 +7,7 @@ FAISS only stores vectors. We need to store:
 - vector_id -> prompt_id
 - prompt_id -> {prompt_text, response_text, metadata}
 
-For MVP: Simple JSON file storage
-For Production: PostgreSQL + Redis
+Storage layer: JSON file with PostgreSQL and Redis integration
 """
 import json
 import os

@@ -171,8 +171,7 @@ class WindowSelector:
         embeddings = []
 
         # For each cache event, try to get the embedding
-        # In practice, you'd join with embedding_records or store embeddings differently
-        # For MVP, we'll fetch from embedding_records based on the time period
+        # Fetch from embedding_records based on the time period
         embedding_query = self.session.query(EmbeddingRecord).filter(
             and_(
                 EmbeddingRecord.created_at >= start_time,

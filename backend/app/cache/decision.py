@@ -169,8 +169,8 @@ class CacheDecisionEngine:
         if self.config.require_same_model:
             return cached_model == requested_model
 
-        # Otherwise, allow reuse (Week 2 MVP behavior)
-        # Later: Add smarter compatibility logic
+        # Otherwise, allow cross-model reuse
+        # Future enhancement: Add smarter compatibility logic
         #   - gpt-4 can reuse gpt-4-turbo responses
         #   - But not gpt-3.5 -> gpt-4
         return True

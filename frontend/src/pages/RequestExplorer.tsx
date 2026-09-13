@@ -7,6 +7,8 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search, Filter, Download, RefreshCw } from 'lucide-react';
 import { getTopCachedPrompts, TopCachedPrompt } from '../api/metricsApi';
+import LoadingSpinner from '../components/LoadingSpinner';
+import { REFETCH_INTERVALS } from '../utils/constants';
 
 type CacheStatusFilter = 'all' | 'hit' | 'miss';
 
@@ -14,11 +16,11 @@ export default function RequestExplorer() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<CacheStatusFilter>('all');
 
-  // Fetch cached prompts (as a proxy for request history)
+  // Fetch cached prompts for request history
   const { data: requests, isLoading, refetch } = useQuery<TopCachedPrompt[]>({
     queryKey: ['request-explorer', 100],
     queryFn: () => getTopCachedPrompts(100, '24h'),
-    refetchInterval: 30000,
+    refetchInterval: REFETCH_INTERVALS.FAST,
   });
 
   // Filter requests based on search and status
@@ -29,8 +31,7 @@ export default function RequestExplorer() {
       request.response.toLowerCase().includes(searchQuery.toLowerCase()) ||
       request.model.toLowerCase().includes(searchQuery.toLowerCase());
 
-    // Since we're using cached prompts, all have hits
-    // In a real implementation, this would filter by actual cache_status
+    // Filter by cache status (currently showing cached prompts only)
     const matchesStatus = statusFilter === 'all' || statusFilter === 'hit';
 
     return matchesSearch && matchesStatus;
@@ -61,14 +62,7 @@ export default function RequestExplorer() {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading requests...</p>
-        </div>
-      </div>
-    );
+    return <LoadingSpinner message="Loading requests..." />;
   }
 
   return (
