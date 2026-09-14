@@ -32,49 +32,105 @@ DriftCache is a semantic caching layer that sits between applications and LLM pr
 DriftCache/
 ├── backend/
 │   ├── app/
-│   │   ├── api/endpoints/           # API routes
-│   │   ├── agents/                  # Autonomous agents
+│   │   ├── api/
+│   │   │   ├── endpoints/           # API route handlers
+│   │   │   │   ├── chat.py         # Chat completions (OpenAI-compatible)
+│   │   │   │   ├── metrics.py      # Cache metrics & analytics
+│   │   │   │   ├── training.py     # Fine-tuning pipeline
+│   │   │   │   ├── supervisor.py   # Autonomous optimization
+│   │   │   │   ├── drift.py        # Drift detection
+│   │   │   │   ├── evaluation.py   # Cache quality evaluation
+│   │   │   │   ├── vectorstore.py  # FAISS index management
+│   │   │   │   └── models.py       # Model listing
+│   │   │   └── routes.py           # Route registration
+│   │   ├── agents/                  # LangGraph autonomous agents
 │   │   │   ├── threshold_optimizer.py
-│   │   │   ├── index_rebuild_agent.py
+│   │   │   ├── index_rebuilder.py
 │   │   │   └── supervisor.py
-│   │   ├── providers/               # LLM provider integrations
+│   │   ├── llm/                     # LLM provider integrations
 │   │   │   ├── anthropic_provider.py
 │   │   │   ├── openai_provider.py
 │   │   │   └── router.py
 │   │   ├── training/                # Fine-tuning pipeline
-│   │   │   ├── data_generator.py   # Training data collection
-│   │   │   ├── trainer.py          # PyTorch training
+│   │   │   ├── data_collector.py   # Training data generation
+│   │   │   ├── trainer.py          # PyTorch contrastive learning
 │   │   │   └── evaluator.py        # Model evaluation
-│   │   ├── optimization/            # Multi-objective scoring
-│   │   ├── vectorstore/             # FAISS index management
 │   │   ├── cache/                   # Cache decision engine
-│   │   ├── embeddings/              # Embedding service
-│   │   └── models/                  # SQLAlchemy models
-│   ├── alembic/versions/            # Database migrations
-│   ├── data/cache/                  # FAISS index & metadata
+│   │   │   ├── service.py          # Main cache orchestrator
+│   │   │   ├── store.py            # Redis/PostgreSQL storage
+│   │   │   └── decision.py         # Hit/miss decision logic
+│   │   ├── vectorstore/             # FAISS vector search
+│   │   │   ├── faiss_index.py      # FAISS operations
+│   │   │   ├── storage.py          # Metadata storage
+│   │   │   └── search.py           # Semantic search service
+│   │   ├── embeddings/              # Embedding generation
+│   │   │   ├── service.py          # Embedding service
+│   │   │   ├── model.py            # sentence-transformers wrapper
+│   │   │   └── utils.py            # Text processing utilities
+│   │   ├── optimization/            # Multi-objective optimization
+│   │   ├── drift/                   # Drift detection system
+│   │   ├── evaluation/              # Cache quality evaluation
+│   │   ├── metrics/                 # Metrics collection
+│   │   ├── database/                # PostgreSQL connection
+│   │   ├── repositories/            # Data access layer
+│   │   ├── services/                # Business logic
+│   │   ├── models/                  # Pydantic & SQLAlchemy schemas
+│   │   ├── core/                    # Config & dependencies
+│   │   └── main.py                  # FastAPI application
+│   ├── alembic/
+│   │   └── versions/                # Database migrations
+│   ├── tests/                       # Unit & integration tests
+│   │   ├── test_vectorstore.py
+│   │   ├── test_embeddings.py
+│   │   ├── test_streaming.py
+│   │   └── test_gateway.py
+│   ├── data/cache/                  # FAISS index & metadata files
+│   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/
-│   │   ├── components/              # React components
 │   │   ├── pages/                   # Dashboard pages
-│   │   └── api/                     # API integration
+│   │   │   ├── Dashboard.tsx       # Main overview
+│   │   │   ├── CacheAnalytics.tsx  # Cache performance
+│   │   │   ├── LatencyAnalytics.tsx
+│   │   │   ├── CostSavings.tsx
+│   │   │   ├── RequestExplorer.tsx
+│   │   │   └── Settings.tsx
+│   │   ├── components/              # Reusable components
+│   │   │   ├── Layout.tsx
+│   │   │   ├── MetricCard.tsx
+│   │   │   └── LoadingSpinner.tsx
+│   │   ├── api/                     # API client
+│   │   │   ├── metricsApi.ts
+│   │   │   └── mockData.ts
+│   │   ├── utils/                   # Utility functions
+│   │   │   ├── formatting.ts
+│   │   │   └── constants.ts
+│   │   ├── App.tsx
+│   │   └── main.tsx
+│   ├── index.html
+│   ├── package.json
+│   ├── vite.config.ts
+│   ├── tailwind.config.js
 │   └── Dockerfile
 ├── benchmarks/
-│   ├── semantic_cache_benchmark.py
-│   ├── load_test.py
-│   ├── datasets/                    # Test datasets
-│   └── results/                     # Benchmark results
+│   ├── semantic_cache_benchmark.py  # Comprehensive benchmark suite
+│   ├── load_test.py                 # Concurrent load testing
+│   ├── datasets/                    # Benchmark test data
+│   └── results/                     # JSON benchmark outputs
 ├── scripts/
-│   ├── populate_metrics.py          # Populate dashboard with test data
-│   ├── demo/                        # Interactive demos
-│   │   ├── run_demo.py
-│   │   └── prompts/
-│   └── smoke_test.sh
-├── tests/
-│   ├── test_cache_performance.py
-│   ├── test_production_api.py
-│   └── quick_test.sh
-└── docker-compose.yml
+│   ├── populate_demo_data.py        # Populate production with demo data
+│   ├── simple_benchmark_simulation.py
+│   ├── smoke_test.sh                # E2E system test
+│   └── demo/                        # Interactive demos
+│       ├── run_demo.py             # Semantic cache demo
+│       ├── generate_drift.py       # Drift detection demo
+│       ├── seed_cache.py           # Seed local cache
+│       └── prompts/                # Demo prompt datasets
+├── docker/                          # Docker configurations
+├── data/cache/                      # Shared cache data
+├── docker-compose.yml
+└── README.md
 ```
 
 ## High-Level Architecture
