@@ -33,77 +33,77 @@ DriftCache/
 ├── backend/
 │   ├── app/
 │   │   ├── api/
-│   │   │   ├── endpoints/           # API route handlers
-│   │   │   │   ├── chat.py         # Chat completions (OpenAI-compatible)
-│   │   │   │   ├── metrics.py      # Cache metrics & analytics
-│   │   │   │   ├── training.py     # Fine-tuning pipeline
-│   │   │   │   ├── supervisor.py   # Autonomous optimization
-│   │   │   │   ├── drift.py        # Drift detection
-│   │   │   │   ├── evaluation.py   # Cache quality evaluation
-│   │   │   │   ├── vectorstore.py  # FAISS index management
-│   │   │   │   └── models.py       # Model listing
-│   │   │   └── routes.py           # Route registration
-│   │   ├── agents/                  # LangGraph autonomous agents
+│   │   │   ├── endpoints/           
+│   │   │   │   ├── chat.py         
+│   │   │   │   ├── metrics.py      
+│   │   │   │   ├── training.py     
+│   │   │   │   ├── supervisor.py   
+│   │   │   │   ├── drift.py        
+│   │   │   │   ├── evaluation.py   
+│   │   │   │   ├── vectorstore.py  
+│   │   │   │   └── models.py       
+│   │   │   └── routes.py           
+│   │   ├── agents/                  
 │   │   │   ├── threshold_optimizer.py
 │   │   │   ├── index_rebuilder.py
 │   │   │   └── supervisor.py
-│   │   ├── llm/                     # LLM provider integrations
+│   │   ├── llm/                     
 │   │   │   ├── anthropic_provider.py
 │   │   │   ├── openai_provider.py
 │   │   │   └── router.py
-│   │   ├── training/                # Fine-tuning pipeline
-│   │   │   ├── data_collector.py   # Training data generation
-│   │   │   ├── trainer.py          # PyTorch contrastive learning
-│   │   │   └── evaluator.py        # Model evaluation
-│   │   ├── cache/                   # Cache decision engine
-│   │   │   ├── service.py          # Main cache orchestrator
-│   │   │   ├── store.py            # Redis/PostgreSQL storage
-│   │   │   └── decision.py         # Hit/miss decision logic
-│   │   ├── vectorstore/             # FAISS vector search
-│   │   │   ├── faiss_index.py      # FAISS operations
-│   │   │   ├── storage.py          # Metadata storage
-│   │   │   └── search.py           # Semantic search service
-│   │   ├── embeddings/              # Embedding generation
-│   │   │   ├── service.py          # Embedding service
-│   │   │   ├── model.py            # sentence-transformers wrapper
-│   │   │   └── utils.py            # Text processing utilities
-│   │   ├── optimization/            # Multi-objective optimization
-│   │   ├── drift/                   # Drift detection system
-│   │   ├── evaluation/              # Cache quality evaluation
-│   │   ├── metrics/                 # Metrics collection
-│   │   ├── database/                # PostgreSQL connection
-│   │   ├── repositories/            # Data access layer
-│   │   ├── services/                # Business logic
-│   │   ├── models/                  # Pydantic & SQLAlchemy schemas
-│   │   ├── core/                    # Config & dependencies
-│   │   └── main.py                  # FastAPI application
+│   │   ├── training/                
+│   │   │   ├── data_collector.py   
+│   │   │   ├── trainer.py          
+│   │   │   └── evaluator.py        
+│   │   ├── cache/                   
+│   │   │   ├── service.py          
+│   │   │   ├── store.py            
+│   │   │   └── decision.py         
+│   │   ├── vectorstore/            
+│   │   │   ├── faiss_index.py     
+│   │   │   ├── storage.py          
+│   │   │   └── search.py          
+│   │   ├── embeddings/              
+│   │   │   ├── service.py          
+│   │   │   ├── model.py           
+│   │   │   └── utils.py            
+│   │   ├── optimization/            
+│   │   ├── drift/                  
+│   │   ├── evaluation/             
+│   │   ├── metrics/               
+│   │   ├── database/                
+│   │   ├── repositories/            
+│   │   ├── services/                
+│   │   ├── models/                  
+│   │   ├── core/                   
+│   │   └── main.py                 
 │   ├── alembic/
-│   │   └── versions/                # Database migrations
-│   ├── tests/                       # Unit & integration tests
+│   │   └── versions/               
+│   ├── tests/                       
 │   │   ├── test_vectorstore.py
 │   │   ├── test_embeddings.py
 │   │   ├── test_streaming.py
 │   │   └── test_gateway.py
-│   ├── data/cache/                  # FAISS index & metadata files
+│   ├── data/cache/                
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/
-│   │   ├── pages/                   # Dashboard pages
-│   │   │   ├── Dashboard.tsx       # Main overview
-│   │   │   ├── CacheAnalytics.tsx  # Cache performance
+│   │   ├── pages/                  
+│   │   │   ├── Dashboard.tsx      
+│   │   │   ├── CacheAnalytics.tsx  
 │   │   │   ├── LatencyAnalytics.tsx
 │   │   │   ├── CostSavings.tsx
 │   │   │   ├── RequestExplorer.tsx
 │   │   │   └── Settings.tsx
-│   │   ├── components/              # Reusable components
+│   │   ├── components/             
 │   │   │   ├── Layout.tsx
 │   │   │   ├── MetricCard.tsx
 │   │   │   └── LoadingSpinner.tsx
-│   │   ├── api/                     # API client
+│   │   ├── api/                     
 │   │   │   ├── metricsApi.ts
 │   │   │   └── mockData.ts
-│   │   ├── utils/                   # Utility functions
+│   │   ├── utils/                  
 │   │   │   ├── formatting.ts
 │   │   │   └── constants.ts
 │   │   ├── App.tsx
@@ -114,21 +114,21 @@ DriftCache/
 │   ├── tailwind.config.js
 │   └── Dockerfile
 ├── benchmarks/
-│   ├── semantic_cache_benchmark.py  # Comprehensive benchmark suite
-│   ├── load_test.py                 # Concurrent load testing
-│   ├── datasets/                    # Benchmark test data
-│   └── results/                     # JSON benchmark outputs
+│   ├── semantic_cache_benchmark.py  
+│   ├── load_test.py                 
+│   ├── datasets/                    
+│   └── results/                     
 ├── scripts/
-│   ├── populate_demo_data.py        # Populate production with demo data
+│   ├── populate_demo_data.py        
 │   ├── simple_benchmark_simulation.py
-│   ├── smoke_test.sh                # E2E system test
-│   └── demo/                        # Interactive demos
-│       ├── run_demo.py             # Semantic cache demo
-│       ├── generate_drift.py       # Drift detection demo
-│       ├── seed_cache.py           # Seed local cache
-│       └── prompts/                # Demo prompt datasets
-├── docker/                          # Docker configurations
-├── data/cache/                      # Shared cache data
+│   ├── smoke_test.sh                
+│   └── demo/                       
+│       ├── run_demo.py             
+│       ├── generate_drift.py       
+│       ├── seed_cache.py          
+│       └── prompts/               
+├── docker/                          
+├── data/cache/                      
 ├── docker-compose.yml
 └── README.md
 ```
