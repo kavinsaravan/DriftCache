@@ -216,24 +216,6 @@ DriftCache/
 - **Configuration**: Threshold adjustments, model selection
 - **Monitoring**: Real-time system health
 
-## Request Flow
-
-### Cache Hit Path
-1. Application sends prompt to DriftCache API
-2. Generate embedding for prompt
-3. Search vector store for similar embeddings (above threshold)
-4. If a match is found → return cached response
-5. Log cache hit, update metrics
-
-### Cache Miss Path
-1. Application sends prompt to DriftCache API
-2. Generate embedding for prompt
-3. Search vector store → no match found
-4. Forward request to Claude
-5. Store response + embedding in cache
-6. Return response to application
-7. Log cache miss, update metrics
-
 ## Quick Start
 
 ```bash
@@ -356,60 +338,6 @@ response = llm.complete("What is vector search?")
 print(response.text)
 ```
 
-### Understanding Cache Behavior
-
-DriftCache uses **semantic similarity** to match queries:
-
-```python
-# These queries will likely hit the same cache entry:
-queries = [
-    "What is Python?",
-    "Can you explain what Python is?",
-    "Tell me about the Python programming language"
-]
-
-# First request → Cache MISS (calls Claude)
-response1 = client.chat.completions.create(
-    model="claude-sonnet-5",
-    messages=[{"role": "user", "content": queries[0]}]
-)
-# response1.cache_hit = False
-
-# Second/third requests → Cache HIT (instant, no LLM call)
-response2 = client.chat.completions.create(
-    model="claude-sonnet-5",
-    messages=[{"role": "user", "content": queries[1]}]
-)
-# response2.cache_hit = True (saved ~$0.001)
-```
-
-### View Your Metrics
-
-After making requests, view real-time analytics at:
-**https://frontend-kavinsaravan-1858s-projects.vercel.app**
-
-You'll see:
-- Total requests and cache hit rate
-- Cost savings and LLM calls avoided
-- Average latency improvements
-- Recent requests timeline
-
-### Streaming Support
-
-DriftCache supports streaming responses:
-
-```python
-response = client.chat.completions.create(
-    model="claude-sonnet-5",
-    messages=[{"role": "user", "content": "Write a poem"}],
-    stream=True
-)
-
-for chunk in response:
-    if chunk.choices[0].delta.content:
-        print(chunk.choices[0].delta.content, end="")
-```
-
 ### Benefits
 
 - **Reduce Costs**: Cache hits avoid LLM API calls (save ~$0.001-0.01 per request)
@@ -417,35 +345,6 @@ for chunk in response:
 - **Semantic Matching**: Paraphrased queries hit the same cache (not just exact matches)
 - **OpenAI Compatible**: Works with any tool/framework that supports OpenAI API
 
-## Demo Scenarios
-
-Run scripted demos showcasing all capabilities:
-
-```bash
-pip install requests colorama
-
-# Seed cache with baseline data
-python demo/seed_cache.py
-
-# Run demos
-python demo/run_demo.py --all                # Basic demos
-python demo/generate_drift.py all            # Autonomous demos
-```
-
-## Benchmarking
-
-```bash
-pip install requests aiohttp
-
-# Comprehensive benchmark (cache hit rate, latency, quality)
-python benchmarks/semantic_cache_benchmark.py
-
-# Load test (concurrent requests, throughput)
-python benchmarks/load_test.py
-
-# View results
-cat benchmarks/results/latest_benchmark.json
-```
 
 ## Performance Metrics
 
