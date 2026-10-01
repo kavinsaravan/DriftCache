@@ -241,13 +241,6 @@ Services:
 
 DriftCache is **OpenAI-compatible**, making it a drop-in replacement for existing LLM integrations. Just change your `base_url` to start caching responses and reducing costs.
 
-### Live Demo
-
-Try our hosted instance:
-- **API URL**: `https://driftcache-api-production.up.railway.app/api/v1`
-- **Dashboard**: https://frontend-kavinsaravan-1858s-projects.vercel.app
-- **Supported Models**: `claude-sonnet-5`, `claude-3-opus`, `claude-3-sonnet`, `claude-3-haiku`
-
 ### Quick Integration
 
 #### Python (OpenAI SDK)
