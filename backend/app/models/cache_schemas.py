@@ -200,25 +200,18 @@ class CacheKey(BaseModel):
         """
         Convert to text for embedding generation
 
-        Includes conversation history to properly match multi-turn conversations
+        IMPORTANT: Only embeds the current user message to avoid truncation.
+        System prompt and conversation history are matched exactly via hashes.
 
         Args:
-            include_system: Whether to include system prompt
+            include_system: Ignored (kept for backward compatibility)
 
         Returns:
-            Combined text for embedding
+            Just the current user message (prompt_text)
         """
-        parts = []
-
-        if include_system and self.system_prompt:
-            parts.append(f"[SYSTEM] {self.system_prompt}")
-
-        if self.conversation_history:
-            parts.append(self.conversation_history)
-
-        parts.append(self.prompt_text)
-
-        return " ".join(parts)
+        # Only embed the current question to avoid truncation at 256 tokens
+        # System prompt and history are matched via exact hash comparison
+        return self.prompt_text
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""

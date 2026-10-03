@@ -64,7 +64,8 @@ class SemanticSearchService:
         response_text: str,
         model_name: str,
         tenant_id: str = "default",
-        system_prompt: Optional[str] = None
+        system_prompt: Optional[str] = None,
+        conversation_history: Optional[str] = None
     ) -> int:
         """
         Add an embedding to the search index
@@ -75,6 +76,7 @@ class SemanticSearchService:
             model_name: Model that generated the response
             tenant_id: Tenant namespace
             system_prompt: System prompt used (if any)
+            conversation_history: Conversation context (for exact matching)
 
         Returns:
             Vector ID assigned by FAISS
@@ -96,6 +98,7 @@ class SemanticSearchService:
             embedding_model=self.embedding_service.model.model_name,
             tenant_id=tenant_id,
             system_prompt=system_prompt,
+            conversation_history=conversation_history,
             timestamp=embedding.metadata.timestamp,
             request_params=embedding.metadata.request_params,
             cache_hits=0
@@ -246,6 +249,7 @@ class SemanticSearchService:
         model_name: Optional[str] = None,
         tenant_id: Optional[str] = None,
         system_prompt: Optional[str] = None,
+        conversation_history: Optional[str] = None,
         require_same_model: bool = False
     ) -> Optional[CacheEntry]:
         """
@@ -287,9 +291,14 @@ class SemanticSearchService:
                 if metadata.model_name != model_name:
                     continue
 
-            # Filter by system prompt (must match exactly if both exist)
+            # Filter by system prompt (must match exactly)
             if system_prompt is not None or metadata.system_prompt is not None:
                 if system_prompt != metadata.system_prompt:
+                    continue
+
+            # Filter by conversation history (must match exactly for multi-turn)
+            if conversation_history is not None or metadata.conversation_history is not None:
+                if conversation_history != metadata.conversation_history:
                     continue
 
             # Check TTL expiration

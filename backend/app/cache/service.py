@@ -139,6 +139,7 @@ class CacheService:
             model_name=model_name,
             tenant_id=tenant_id,
             system_prompt=cache_key.system_prompt,
+            conversation_history=cache_key.conversation_history,
             require_same_model=config.require_same_model if config else False
         )
 
@@ -284,7 +285,8 @@ class CacheService:
             response_text=response_text,
             model_name=model_name,
             tenant_id=tenant_id,
-            system_prompt=cache_key.system_prompt
+            system_prompt=cache_key.system_prompt,
+            conversation_history=cache_key.conversation_history
         )
 
         # Persist FAISS index to disk so it survives restarts

@@ -223,7 +223,10 @@ DriftCache/
 git clone <repository-url>
 cd DriftCache
 cp .env.example .env
-# Add your OPENAI_API_KEY to .env
+# Configure environment variables in .env:
+# - API_KEY: Main API key for chat/completions (required)
+# - METRICS_API_KEY: Read-only key for dashboard (optional, recommended)
+# - OPENAI_API_KEY or ANTHROPIC_API_KEY: For LLM provider
 
 # Start with Docker (recommended)
 docker compose up --build
@@ -231,6 +234,8 @@ docker compose up --build
 # Open dashboard
 open http://localhost
 ```
+
+**Security Note:** The dashboard uses `METRICS_API_KEY` (read-only) instead of the main `API_KEY`. This allows safe embedding in the frontend build without exposing write access. Set both keys in your backend `.env` file.
 
 ## Integration Guide
 
@@ -246,7 +251,7 @@ from openai import OpenAI
 # Just point to DriftCache instead of OpenAI
 client = OpenAI(
     base_url="https://driftcache-api-production.up.railway.app/api/v1",
-    api_key="dummy"  # Not required, but SDK expects it
+    api_key="your-api-key-here"  # Set API_KEY in backend .env
 )
 
 response = client.chat.completions.create(
@@ -304,7 +309,7 @@ from langchain_openai import ChatOpenAI
 llm = ChatOpenAI(
     base_url="https://driftcache-api-production.up.railway.app/api/v1",
     model="claude-sonnet-5",
-    api_key="dummy"
+    api_key="your-api-key-here"
 )
 
 response = llm.invoke("Explain semantic caching")
@@ -319,7 +324,7 @@ from llama_index.llms.openai import OpenAI
 llm = OpenAI(
     api_base="https://driftcache-api-production.up.railway.app/api/v1",
     model="claude-sonnet-5",
-    api_key="dummy"
+    api_key="your-api-key-here"
 )
 
 response = llm.complete("What is vector search?")

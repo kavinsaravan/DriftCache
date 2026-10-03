@@ -5,7 +5,7 @@ All endpoints require API key authentication
 """
 from fastapi import APIRouter, Depends
 from app.api.endpoints import chat, models, evaluation, metrics, drift, agents, supervisor, benchmark, vectorstore, training
-from app.core.auth import verify_api_key
+from app.core.auth import verify_api_key, verify_metrics_key
 
 # Protect all endpoints with API key authentication
 api_router = APIRouter(dependencies=[Depends(verify_api_key)])
@@ -17,8 +17,10 @@ api_router.include_router(chat.router, tags=["chat"])
 # Evaluation endpoints
 api_router.include_router(evaluation.router, tags=["evaluation"])
 
-# Metrics endpoints
-api_router.include_router(metrics.router, tags=["metrics"])
+# Metrics endpoints (use separate metrics key for dashboard access)
+metrics_router = APIRouter(dependencies=[Depends(verify_metrics_key)])
+metrics_router.include_router(metrics.router, tags=["metrics"])
+api_router.include_router(metrics_router)
 
 # Drift detection endpoints
 api_router.include_router(drift.router, prefix="/drift", tags=["drift"])

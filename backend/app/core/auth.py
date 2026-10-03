@@ -82,3 +82,89 @@ async def verify_api_key(
         )
 
     return provided_key
+
+
+async def verify_metrics_key(
+    x_api_key: Optional[str] = Security(api_key_header),
+    bearer: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme)
+) -> str:
+    """
+    Verify API key for metrics/dashboard endpoints (read-only)
+
+    Accepts either:
+    - Main API_KEY (full access)
+    - METRICS_API_KEY (read-only, safe for frontend)
+
+    This allows the dashboard to use a separate read-only key
+    that can be safely included in the frontend build.
+
+    Args:
+        x_api_key: API key from X-API-Key header
+        bearer: API key from Authorization: Bearer header
+
+    Returns:
+        The validated API key
+
+    Raises:
+        HTTPException: If API key is invalid or missing
+    """
+    # Skip check if not required (development mode)
+    if not settings.REQUIRE_API_KEY:
+        return "dev-mode"
+
+    # Extract API key from either header
+    provided_key = None
+    if bearer and bearer.credentials:
+        provided_key = bearer.credentials
+    elif x_api_key:
+        provided_key = x_api_key
+
+    # Check if API key was provided
+    if not provided_key:
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "error": {
+                    "message": "Missing API key. Provide Authorization: Bearer <key> or X-API-Key: <key> header.",
+                    "type": "authentication_error",
+                    "code": "missing_api_key"
+                }
+            }
+        )
+
+    # Check if either main key or metrics key is configured
+    if not settings.API_KEY and not settings.METRICS_API_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="API key not configured on server"
+        )
+
+    # Verify API key matches either main key or metrics key (timing-safe comparison)
+    # Encode to bytes to handle non-ASCII characters safely
+    valid = False
+
+    if settings.API_KEY:
+        valid = valid or secrets.compare_digest(
+            provided_key.encode('utf-8'),
+            settings.API_KEY.encode('utf-8')
+        )
+
+    if settings.METRICS_API_KEY:
+        valid = valid or secrets.compare_digest(
+            provided_key.encode('utf-8'),
+            settings.METRICS_API_KEY.encode('utf-8')
+        )
+
+    if not valid:
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "error": {
+                    "message": "Invalid API key",
+                    "type": "authentication_error",
+                    "code": "invalid_api_key"
+                }
+            }
+        )
+
+    return provided_key
