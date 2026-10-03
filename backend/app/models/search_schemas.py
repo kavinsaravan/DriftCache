@@ -106,6 +106,11 @@ class VectorMetadata(BaseModel):
             data["timestamp"] = datetime.fromisoformat(data["timestamp"])
         if data.get("last_accessed") and isinstance(data["last_accessed"], str):
             data["last_accessed"] = datetime.fromisoformat(data["last_accessed"])
+
+        # Provide defaults for new fields (for backward compatibility with old cache)
+        data.setdefault("tenant_id", "default")
+        data.setdefault("system_prompt", None)
+
         return cls(**data)
 
 

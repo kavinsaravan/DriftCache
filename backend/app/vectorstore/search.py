@@ -288,16 +288,15 @@ class SemanticSearchService:
                     continue
 
             # Filter by system prompt (must match exactly if both exist)
-            result_system = metadata.system_prompt if hasattr(metadata, 'system_prompt') else None
-            if system_prompt is not None or result_system is not None:
-                if system_prompt != result_system:
+            if system_prompt is not None or metadata.system_prompt is not None:
+                if system_prompt != metadata.system_prompt:
                     continue
 
             # Check TTL expiration
-            if hasattr(metadata, 'created_at') and metadata.created_at:
+            if metadata.timestamp:
                 from datetime import datetime, timedelta
                 ttl_seconds = settings.CACHE_TTL_SECONDS
-                expiration = metadata.created_at + timedelta(seconds=ttl_seconds)
+                expiration = metadata.timestamp + timedelta(seconds=ttl_seconds)
                 if datetime.utcnow() > expiration:
                     continue
 

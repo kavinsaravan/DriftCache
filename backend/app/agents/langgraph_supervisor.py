@@ -158,6 +158,7 @@ class LangGraphSupervisor:
         """Node: Load current system metrics"""
         logger.info(f"[{state['run_id']}] Loading system state...")
 
+        # Normalize tenant_id (default to "default" if None)
         tenant_id = state.get("tenant_id") or "default"
 
         # Get current threshold from database
@@ -192,7 +193,7 @@ class LangGraphSupervisor:
             "stale_vector_ratio": 0.15,  # Estimated from index metadata
         }
 
-        return {"system_state": system_state}
+        return {"system_state": system_state, "tenant_id": tenant_id}
 
     def _diagnose_node(self, state: SupervisorState) -> Dict[str, Any]:
         """Node: Diagnose system health"""

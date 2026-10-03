@@ -71,7 +71,7 @@ class UpdateThresholdInput(BaseModel):
     new_threshold: float = Field(..., ge=0.0, le=1.0, description="New threshold value (0-1)")
     reason: str = Field(..., description="Reason for threshold change")
     dry_run: bool = Field(True, description="If True, only simulate update")
-    tenant_id: Optional[str] = Field(None, description="Optional tenant ID")
+    tenant_id: str = Field("default", description="Tenant ID")
 
 
 class UpdateThresholdTool(BaseTool):
@@ -107,7 +107,7 @@ class UpdateThresholdTool(BaseTool):
         new_threshold: float,
         reason: str,
         dry_run: bool = True,
-        tenant_id: Optional[str] = None
+        tenant_id: str = "default"
     ) -> Dict[str, Any]:
         """Update threshold"""
         try:

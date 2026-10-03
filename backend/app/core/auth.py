@@ -68,7 +68,8 @@ async def verify_api_key(
         )
 
     # Verify API key matches (timing-safe comparison)
-    if not secrets.compare_digest(provided_key, settings.API_KEY):
+    # Encode to bytes to handle non-ASCII characters safely
+    if not secrets.compare_digest(provided_key.encode('utf-8'), settings.API_KEY.encode('utf-8')):
         raise HTTPException(
             status_code=401,
             detail={
