@@ -233,11 +233,6 @@ docker compose up --build
 open http://localhost
 ```
 
-Services:
-- Frontend: http://localhost
-- Backend API: http://localhost:8000
-- API Docs: http://localhost:8000/docs
-
 ## Integration Guide
 
 DriftCache is **OpenAI-compatible**, making it a drop-in replacement for existing LLM integrations. Just change your `base_url` to start caching responses and reducing costs.
