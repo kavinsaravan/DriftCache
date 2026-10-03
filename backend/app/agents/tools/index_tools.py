@@ -49,17 +49,57 @@ class IndexStatusTool(BaseTool):
         try:
             logger.info(f"Getting index status for tenant_id={tenant_id}")
 
-            #  Return mock status
-            #  Will query actual FAISS index metadata
+            # Get real FAISS index data
+            from app.vectorstore.search import get_search_service
+            from app.core.config import settings
+            import os
+            from pathlib import Path
+
+            search_service = get_search_service()
+            faiss_index = search_service.faiss_index
+
+            # Get index size from FAISS
+            index_size = 0
+            if faiss_index and faiss_index.index is not None:
+                index_size = faiss_index.index.ntotal
+
+            # Get embedding model and dimension from settings
+            embedding_model = settings.EMBEDDING_MODEL
+            dimension = settings.EMBEDDING_DIMENSION
+
+            # Get last rebuild time from index file modification time
+            last_rebuild = None
+            days_since_rebuild = None
+            index_path = faiss_index.index_path if faiss_index else None
+
+            if index_path and os.path.exists(index_path):
+                mtime = os.path.getmtime(index_path)
+                last_rebuild_dt = datetime.fromtimestamp(mtime)
+                last_rebuild = last_rebuild_dt.isoformat() + "Z"
+                days_since_rebuild = (datetime.utcnow() - last_rebuild_dt).days
+            else:
+                last_rebuild = None
+                days_since_rebuild = None
+
+            # Determine health status
+            health_status = "healthy"
+            if index_size == 0:
+                health_status = "empty"
+            elif days_since_rebuild and days_since_rebuild > 30:
+                health_status = "degraded"
+
+            # Create version identifier
+            index_version = f"v1_{last_rebuild_dt.strftime('%Y%m%d')}" if last_rebuild_dt else "unknown"
+
             return {
-                "index_size": 15234,
-                "last_rebuild": "2024-06-10T08:30:00Z",
-                "avg_search_time_ms": 12.3,
-                "index_version": "v1_20240610",
-                "embedding_model": "text-embedding-ada-002",
-                "dimension": 1536,
-                "health_status": "healthy",
-                "days_since_rebuild": 3,
+                "index_size": index_size,
+                "last_rebuild": last_rebuild,
+                "avg_search_time_ms": 12.3,  # TODO: Track real search times
+                "index_version": index_version,
+                "embedding_model": embedding_model,
+                "dimension": dimension,
+                "health_status": health_status,
+                "days_since_rebuild": days_since_rebuild,
                 "tenant_id": tenant_id,
                 "status": "success"
             }

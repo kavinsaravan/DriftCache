@@ -141,16 +141,69 @@ class CacheInvalidationTool(BaseTool):
                 f"reason={reason}, dry_run={dry_run}"
             )
 
-            # Simulation mode (dry-run only for safety)
+            if dry_run:
+                # Simulation mode
+                return {
+                    "status": "simulated",
+                    "cache_id": cache_id,
+                    "reason": reason,
+                    "action": "would_invalidate",
+                    "message": f"DRY RUN: Would invalidate cache entry {cache_id}",
+                    "details": {
+                        "would_remove_from_redis": True,
+                        "would_remove_from_metadata": True,
+                        "faiss_removal": "requires_IndexIDMap2_wrapper",
+                        "reason": reason
+                    }
+                }
+
+            # Actually invalidate
+            import asyncio
+            from app.cache.redis_store import get_redis_store
+            from app.vectorstore.storage import get_metadata_store
+
+            removed_from_redis = False
+            removed_from_metadata = False
+
+            # Remove from Redis
+            try:
+                redis_store = asyncio.run(get_redis_store())
+                asyncio.run(redis_store.redis.delete(f"cache:{cache_id}"))
+                removed_from_redis = True
+                logger.info(f"Removed {cache_id} from Redis")
+            except Exception as e:
+                logger.error(f"Failed to remove from Redis: {e}")
+
+            # Remove from metadata store
+            try:
+                metadata_store = get_metadata_store()
+                # Find vector_id by searching metadata
+                vector_id_to_remove = None
+                for vid, meta in metadata_store.metadata.items():
+                    if meta.cache_key_hash == cache_id:
+                        vector_id_to_remove = vid
+                        break
+
+                if vector_id_to_remove is not None:
+                    metadata_store.delete(vector_id_to_remove)
+                    metadata_store.save()
+                    removed_from_metadata = True
+                    logger.info(f"Removed vector_id={vector_id_to_remove} from metadata")
+                else:
+                    logger.warning(f"Could not find metadata for cache_id={cache_id}")
+            except Exception as e:
+                logger.error(f"Failed to remove from metadata: {e}")
+
             return {
-                "status": "simulated",
+                "status": "completed",
                 "cache_id": cache_id,
                 "reason": reason,
-                "action": "would_invalidate",
-                "message": f"DRY RUN: Would invalidate cache entry {cache_id}",
+                "action": "invalidated",
+                "message": f"Invalidated cache entry {cache_id}",
                 "details": {
-                    "would_remove_from_redis": True,
-                    "would_mark_inactive_in_db": True,
+                    "removed_from_redis": removed_from_redis,
+                    "removed_from_metadata": removed_from_metadata,
+                    "faiss_removal": "not_implemented_requires_IndexIDMap2",
                     "reason": reason
                 }
             }

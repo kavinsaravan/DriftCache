@@ -14,7 +14,6 @@ from datetime import datetime, timedelta
 import uuid
 
 from app.cache.decision import get_decision_engine, CacheDecisionEngine
-from app.cache.store import get_cache_store, CacheStore
 from app.cache.redis_store import get_redis_store, RedisStore
 from app.vectorstore.search import get_search_service, SemanticSearchService
 from app.embeddings.service import get_embedding_service, EmbeddingService
@@ -41,13 +40,12 @@ class CacheService:
 
     Architecture:
     - Redis for online serving (fast retrieval)
-    - Legacy store for fallback
+    - FAISS for semantic vector search
     """
 
     def __init__(
         self,
         decision_engine: Optional[CacheDecisionEngine] = None,
-        cache_store: Optional[CacheStore] = None,
         redis_store: Optional[RedisStore] = None,
         search_service: Optional[SemanticSearchService] = None,
         embedding_service: Optional[EmbeddingService] = None
@@ -57,18 +55,59 @@ class CacheService:
 
         Args:
             decision_engine: Cache decision engine
-            cache_store: Cache store (legacy/fallback)
             redis_store: Redis store (online serving)
             search_service: Vector search service
             embedding_service: Embedding service
         """
         self.decision_engine = decision_engine or get_decision_engine()
-        self.cache_store = cache_store or get_cache_store()
         self.redis_store = redis_store  # Will be initialized async
         self.search_service = search_service or get_search_service()
         self.embedding_service = embedding_service or get_embedding_service()
 
+        # In-memory threshold cache to avoid DB query on every request
+        self._threshold_cache: dict = {}  # {tenant_id: (threshold, timestamp)}
+        self._threshold_cache_ttl = 30  # seconds
+
+        # Track writes to save index periodically instead of on every write
+        self._writes_since_last_save = 0
+        self._save_index_every_n_writes = 10  # Save every 10 writes
+        self._last_index_save_time = datetime.utcnow()
+        self._save_index_every_seconds = 60  # Or save every 60 seconds
+
         logger.info("CacheService initialized (Redis mode)")
+
+    def _get_cached_threshold(self, tenant_id: str) -> float:
+        """
+        Get threshold from memory cache or DB
+
+        Caches threshold for 30 seconds to avoid DB query on every request.
+
+        Args:
+            tenant_id: Tenant ID
+
+        Returns:
+            Active threshold value
+        """
+        now = datetime.utcnow()
+
+        # Check cache
+        if tenant_id in self._threshold_cache:
+            threshold, timestamp = self._threshold_cache[tenant_id]
+            age_seconds = (now - timestamp).total_seconds()
+
+            if age_seconds < self._threshold_cache_ttl:
+                return threshold
+
+        # Cache miss or expired - query DB
+        db_manager = get_db_manager()
+        with db_manager.session_scope() as db:
+            threshold = get_active_threshold(db, tenant_id=tenant_id)
+
+        # Update cache
+        self._threshold_cache[tenant_id] = (threshold, now)
+
+        logger.debug(f"Threshold cache refreshed for tenant {tenant_id}: {threshold}")
+        return threshold
 
     async def check_cache(
         self,
@@ -109,24 +148,25 @@ class CacheService:
         # Extract cache key
         cache_key = self._extract_cache_key(messages, model_name, tenant_id)
 
-        # Get active threshold from DB if no config provided
+        # Get active threshold from cached value if no config provided
         threshold = None
         if config:
             threshold = config.similarity_threshold
         else:
-            # Get from database using proper context manager
-            db_manager = get_db_manager()
-            with db_manager.session_scope() as db:
-                threshold = get_active_threshold(db, tenant_id=tenant_id)
+            # Get from memory cache (refreshed from DB every 30s)
+            threshold = self._get_cached_threshold(tenant_id=tenant_id)
 
-        # Generate embedding
+        # Generate embedding (wrapped in threadpool to avoid blocking async event loop)
+        from fastapi.concurrency import run_in_threadpool
+
         embedding_text = cache_key.to_embedding_text(
             include_system=config.include_system_prompt if config else True
         )
-        embedding = self.embedding_service.embed_text(
-            text=embedding_text,
-            model_name=model_name,
-            user_id=user_id
+        embedding = await run_in_threadpool(
+            self.embedding_service.embed_text,
+            embedding_text,
+            model_name,
+            user_id
         )
 
         # Search for similar cached responses in FAISS
@@ -271,12 +311,15 @@ class CacheService:
         # Extract cache key
         cache_key = self._extract_cache_key(messages, model_name, tenant_id)
 
-        # Generate embedding
+        # Generate embedding (wrapped in threadpool to avoid blocking async event loop)
+        from fastapi.concurrency import run_in_threadpool
+
         embedding_text = cache_key.to_embedding_text(include_system=True)
-        embedding = self.embedding_service.embed_text(
-            text=embedding_text,
-            model_name=model_name,
-            user_id=user_id
+        embedding = await run_in_threadpool(
+            self.embedding_service.embed_text,
+            embedding_text,
+            model_name,
+            user_id
         )
 
         # Create cache entry
@@ -307,9 +350,6 @@ class CacheService:
             ttl_seconds=ttl
         )
 
-        # Store in legacy cache (backup/fallback)
-        self.cache_store.add(cached_response)
-
         # Add to FAISS vector index
         self.search_service.add_to_index(
             embedding=embedding,
@@ -321,12 +361,25 @@ class CacheService:
             cache_key_hash=cache_key_hash
         )
 
-        # Persist FAISS index to disk so it survives restarts
-        self.search_service.save_index()
+        # Persist FAISS index to disk periodically (not on every write)
+        self._writes_since_last_save += 1
+        now = datetime.utcnow()
+        time_since_save = (now - self._last_index_save_time).total_seconds()
+
+        should_save = (
+            self._writes_since_last_save >= self._save_index_every_n_writes or
+            time_since_save >= self._save_index_every_seconds
+        )
+
+        if should_save:
+            self.search_service.save_index()
+            self._writes_since_last_save = 0
+            self._last_index_save_time = now
+            logger.info(f"Saved FAISS index after {self._writes_since_last_save} writes")
 
         logger.info(
             f"Stored response in cache: cache_id={cache_id[:8]}..., "
-            f"ttl={ttl}s, stored=[redis+legacy+faiss+disk]"
+            f"ttl={ttl}s, stored=[redis+faiss{'+disk' if should_save else ''}]"
         )
 
         return cache_id
@@ -402,7 +455,7 @@ class CacheService:
         Get comprehensive cache statistics
 
         Returns:
-            Dictionary with cache stats from Redis and legacy stores
+            Dictionary with cache stats from Redis and FAISS
         """
         # Ensure Redis store is initialized
         if self.redis_store is None:
@@ -410,7 +463,6 @@ class CacheService:
 
         # Get stats from all sources
         redis_stats = await self.redis_store.get_stats()
-        cache_stats = self.cache_store.get_stats()
         search_stats = self.search_service.get_stats()
 
         # Get recent similarity scores
@@ -418,11 +470,9 @@ class CacheService:
 
         return {
             "redis": redis_stats.model_dump(),
-            "cache": cache_stats.model_dump(),
             "search": search_stats,
             "summary": {
-                "total_cached_responses_redis": await self.redis_store.count(),
-                "total_cached_responses_legacy": self.cache_store.count(),
+                "total_cached_responses": await self.redis_store.count(),
                 "hit_rate": redis_stats.hit_rate,
                 "total_requests": redis_stats.total_requests,
                 "average_similarity": redis_stats.average_similarity,
@@ -431,40 +481,37 @@ class CacheService:
         }
 
     async def clear_cache(self) -> None:
-        """Clear all cache data from Redis and legacy stores"""
+        """Clear all cache data from Redis and FAISS"""
         # Ensure Redis store is initialized
         if self.redis_store is None:
             self.redis_store = await get_redis_store()
 
         # Clear all stores
         await self.redis_store.clear_all()
-        self.cache_store.clear()
         self.search_service.clear_index()
 
-        logger.info("Cleared all cache data (Redis + legacy + FAISS)")
+        logger.info("Cleared all cache data (Redis + FAISS)")
 
     def clear_expired(self) -> int:
         """
-        Clear expired cache entries from legacy store
+        Clear expired vectors from FAISS index
 
         Note: Redis handles TTL expiration automatically
 
         Returns:
             Number of entries cleared
         """
-        return self.cache_store.clear_expired()
+        return self.search_service.remove_expired_vectors()
 
     def save_cache(self) -> None:
-        """Save legacy cache to disk"""
-        self.cache_store.save()
+        """Save FAISS index to disk"""
         self.search_service.save_index()
-        logger.info("Saved legacy cache and FAISS index to disk")
+        logger.info("Saved FAISS index to disk")
 
     def load_cache(self) -> None:
-        """Load legacy cache from disk"""
-        self.cache_store.load()
+        """Load FAISS index from disk"""
         self.search_service.load_index()
-        logger.info("Loaded legacy cache and FAISS index from disk")
+        logger.info("Loaded FAISS index from disk")
 
 
 # Global instance

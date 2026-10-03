@@ -55,12 +55,14 @@ class FAISSIndex:
         """
         Create a new FAISS index
 
-        Uses IndexFlatL2 for exact search with L2 distance (no training required)
+        Uses IndexFlatL2 wrapped in IndexIDMap2 for exact search with removal support
         """
         if self.index_type.lower() == "flat":
             # Exact search using L2 distance
-            self.index = faiss.IndexFlatL2(self.dimension)
-            logger.info("Created IndexFlatL2 (exact search)")
+            base_index = faiss.IndexFlatL2(self.dimension)
+            # Wrap in IndexIDMap2 to enable vector removal by ID
+            self.index = faiss.IndexIDMap2(base_index)
+            logger.info("Created IndexFlatL2 wrapped in IndexIDMap2 (exact search with removal support)")
 
         elif self.index_type.lower() == "ivf":
             # Inverted File Index (faster, approximate)
@@ -113,7 +115,11 @@ class FAISSIndex:
             self._next_id += n_vectors
 
         # Add to index
-        self.index.add(vectors)
+        # IndexIDMap2 requires explicit IDs
+        if hasattr(self.index, 'add_with_ids'):
+            self.index.add_with_ids(vectors, ids)
+        else:
+            self.index.add(vectors)
 
         logger.info(f"Added {n_vectors} vectors to index (total: {self.index.ntotal})")
 
