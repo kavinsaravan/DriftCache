@@ -132,9 +132,14 @@ class CacheService:
         )
 
         # Search for similar cached responses in FAISS
+        # Pass filter parameters to retrieve top-k and filter for valid matches
         cache_entry = self.search_service.get_cache_entry(
             query_embedding=embedding,
-            threshold=threshold
+            threshold=threshold,
+            model_name=model_name,
+            tenant_id=tenant_id,
+            system_prompt=cache_key.system_prompt,
+            require_same_model=config.require_same_model if config else False
         )
 
         # Get cached response from Redis if found
@@ -298,6 +303,9 @@ class CacheService:
         """
         Extract cache key from messages
 
+        Includes conversation history (assistant messages) for proper
+        multi-turn conversation matching.
+
         Args:
             messages: Chat messages
             model_name: Model name
@@ -308,20 +316,46 @@ class CacheService:
         """
         # Extract system prompt
         system_prompt = None
-        user_messages = []
-
         for msg in messages:
             if msg.role == "system":
                 system_prompt = msg.content
-            elif msg.role == "user":
-                user_messages.append(msg.content)
+                break  # Only one system message expected
 
-        # Combine user messages
-        prompt_text = " ".join(user_messages)
+        # Find the last user message (the current query)
+        last_user_idx = None
+        for i in range(len(messages) - 1, -1, -1):
+            if messages[i].role == "user":
+                last_user_idx = i
+                break
+
+        if last_user_idx is None:
+            # No user message found, shouldn't happen but handle gracefully
+            return CacheKey(
+                prompt_text="",
+                system_prompt=system_prompt,
+                conversation_history=None,
+                model_name=model_name,
+                tenant_id=tenant_id
+            )
+
+        # The last user message is the query
+        prompt_text = messages[last_user_idx].content
+
+        # Build conversation history from all messages BEFORE the last user message
+        conversation_parts = []
+        for i, msg in enumerate(messages[:last_user_idx]):
+            if msg.role == "user":
+                conversation_parts.append(f"[USER] {msg.content}")
+            elif msg.role == "assistant":
+                conversation_parts.append(f"[ASSISTANT] {msg.content}")
+            # Skip system messages (already extracted separately)
+
+        conversation_history = " ".join(conversation_parts) if conversation_parts else None
 
         return CacheKey(
             prompt_text=prompt_text,
             system_prompt=system_prompt,
+            conversation_history=conversation_history,
             model_name=model_name,
             tenant_id=tenant_id
         )

@@ -230,54 +230,92 @@ class SemanticSearchService:
     def get_cache_entry(
         self,
         query_embedding: Embedding,
-        threshold: Optional[float] = None
+        threshold: Optional[float] = None,
+        model_name: Optional[str] = None,
+        tenant_id: Optional[str] = None,
+        system_prompt: Optional[str] = None,
+        require_same_model: bool = False
     ) -> Optional[CacheEntry]:
         """
         Get best cache match for a query
 
-        This is the main method used by the cache layer
+        This is the main method used by the cache layer.
+        Retrieves top-k candidates and filters for valid matches.
 
         Args:
             query_embedding: Query embedding
             threshold: Minimum similarity (defaults to settings)
+            model_name: Filter by model name
+            tenant_id: Filter by tenant
+            system_prompt: Filter by system prompt
+            require_same_model: Whether to require exact model match
 
         Returns:
             CacheEntry if match found, None otherwise
         """
         threshold = threshold or settings.SIMILARITY_THRESHOLD
 
-        # Search for matches
-        results = self.search(query_embedding, top_k=1, threshold=threshold)
+        # Search for top candidates (not just top-1)
+        # This allows filtering and picking the best valid match
+        results = self.search(query_embedding, top_k=10, threshold=threshold)
 
-        # Check if we have a match
-        best_match = results.get_best_match()
-        if best_match is None:
-            logger.info("No cache match found")
+        # Filter candidates for valid matches
+        valid_candidates = []
+        for result in results.results:
+            metadata = self.metadata_store.get(result.vector_id)
+            if metadata is None:
+                continue
+
+            # Filter by tenant
+            if tenant_id and metadata.tenant_id != tenant_id:
+                continue
+
+            # Filter by model
+            if model_name and require_same_model:
+                if metadata.model_name != model_name:
+                    continue
+
+            # Filter by system prompt (must match exactly if both exist)
+            result_system = metadata.system_prompt if hasattr(metadata, 'system_prompt') else None
+            if system_prompt is not None or result_system is not None:
+                if system_prompt != result_system:
+                    continue
+
+            # Check TTL expiration
+            if hasattr(metadata, 'created_at') and metadata.created_at:
+                from datetime import datetime, timedelta
+                ttl_seconds = settings.CACHE_TTL_SECONDS
+                expiration = metadata.created_at + timedelta(seconds=ttl_seconds)
+                if datetime.utcnow() > expiration:
+                    continue
+
+            valid_candidates.append((result, metadata))
+
+        if not valid_candidates:
+            logger.info("No valid cache match found after filtering")
             return None
 
-        # Get metadata
-        metadata = self.metadata_store.get(best_match.vector_id)
-        if metadata is None:
-            logger.error(f"Missing metadata for vector_id={best_match.vector_id}")
-            return None
+        # Get the best valid candidate (highest similarity)
+        best_result, best_metadata = valid_candidates[0]
 
         # Increment cache hit counter
-        self.metadata_store.increment_cache_hit(best_match.vector_id)
+        self.metadata_store.increment_cache_hit(best_result.vector_id)
 
         # Create cache entry
         cache_entry = CacheEntry(
-            vector_id=best_match.vector_id,
-            prompt_id=best_match.prompt_id,
-            prompt_text=best_match.prompt_text,
-            response_text=best_match.response_text or "",
-            similarity=best_match.similarity,
-            metadata=metadata,
+            vector_id=best_result.vector_id,
+            prompt_id=best_result.prompt_id,
+            prompt_text=best_result.prompt_text,
+            response_text=best_result.response_text or "",
+            similarity=best_result.similarity,
+            metadata=best_metadata,
             is_cache_hit=True
         )
 
         logger.info(
-            f"Cache HIT: similarity={best_match.similarity:.3f}, "
-            f"vector_id={best_match.vector_id}"
+            f"Cache HIT: similarity={best_result.similarity:.3f}, "
+            f"vector_id={best_result.vector_id} "
+            f"(filtered {len(results.results) - len(valid_candidates)} invalid candidates)"
         )
 
         return cache_entry

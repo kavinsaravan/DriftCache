@@ -192,6 +192,7 @@ class CacheKey(BaseModel):
     """
     prompt_text: str
     system_prompt: Optional[str] = None
+    conversation_history: Optional[str] = None  # Assistant context for multi-turn
     model_name: Optional[str] = None  # Optional for flexible matching
     tenant_id: str = "default"
 
@@ -199,16 +200,23 @@ class CacheKey(BaseModel):
         """
         Convert to text for embedding generation
 
+        Includes conversation history to properly match multi-turn conversations
+
         Args:
             include_system: Whether to include system prompt
 
         Returns:
             Combined text for embedding
         """
-        parts = [self.prompt_text]
+        parts = []
 
         if include_system and self.system_prompt:
-            parts.insert(0, f"[SYSTEM] {self.system_prompt}")
+            parts.append(f"[SYSTEM] {self.system_prompt}")
+
+        if self.conversation_history:
+            parts.append(self.conversation_history)
+
+        parts.append(self.prompt_text)
 
         return " ".join(parts)
 
@@ -217,6 +225,7 @@ class CacheKey(BaseModel):
         return {
             "prompt_text": self.prompt_text,
             "system_prompt": self.system_prompt,
+            "conversation_history": self.conversation_history,
             "model_name": self.model_name,
             "tenant_id": self.tenant_id
         }
