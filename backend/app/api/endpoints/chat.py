@@ -28,6 +28,7 @@ from app.models.schemas import (
 from app.providers.router import provider_router
 from app.services.streaming import StreamCollector, create_cached_stream
 from app.services.cache_recorder import get_cache_recorder
+from app.utils.cost_calculator import calculate_cost
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -110,9 +111,13 @@ async def create_chat_completion(
             async def on_stream_complete(response):
                 """Store the collected response in cache"""
                 try:
+                    # Estimate token count from collected content
+                    output_tokens = response.estimate_tokens()
+
                     logger.info(
                         f"Stream completed: {response.chunks_received} chunks, "
                         f"{len(response.content)} characters, "
+                        f"~{output_tokens} tokens, "
                         f"finish_reason={response.finish_reason}"
                     )
 
@@ -124,6 +129,11 @@ async def create_chat_completion(
                         )
                         return
 
+                    # Estimate input tokens (we don't have exact count in streaming)
+                    # Rough estimate based on request messages
+                    input_text = " ".join([m.content for m in request.messages])
+                    input_tokens = len(input_text) // 4  # ~4 chars per token
+
                     # Store in cache + database
                     await cache_recorder.store_and_record(
                         request_id=request_id,
@@ -131,11 +141,18 @@ async def create_chat_completion(
                         response_text=response.content,
                         model_name=request.model,
                         provider=provider_router.get_provider_for_model(request.model),
-                        input_tokens=None,  # Not available in streaming mode
-                        output_tokens=None,
-                        estimated_cost=None
+                        input_tokens=input_tokens,  # Estimated
+                        output_tokens=output_tokens,  # Estimated
+                        estimated_cost=calculate_cost(
+                            request.model,
+                            input_tokens,
+                            output_tokens
+                        )
                     )
-                    logger.info(f"Cached streaming response: {len(response.content)} chars")
+                    logger.info(
+                        f"Cached streaming response: {len(response.content)} chars, "
+                        f"~{input_tokens + output_tokens} total tokens"
+                    )
 
                 except Exception as e:
                     logger.error(f"Failed to cache streaming response: {e}")
@@ -238,7 +255,11 @@ async def create_chat_completion(
                     provider=provider_router.get_provider_for_model(request.model),
                     input_tokens=response.usage.prompt_tokens if response.usage else None,
                     output_tokens=response.usage.completion_tokens if response.usage else None,
-                    estimated_cost=None  # Cost calculation based on token usage
+                    estimated_cost=calculate_cost(
+                        request.model,
+                        response.usage.prompt_tokens if response.usage else None,
+                        response.usage.completion_tokens if response.usage else None
+                    )
                 )
                 logger.info(f"Stored in cache+DB: {response.usage.total_tokens if response.usage else 0} tokens")
 

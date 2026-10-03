@@ -55,12 +55,14 @@ class FAISSIndex:
         """
         Create a new FAISS index
 
-        Uses IndexFlatL2 for exact search with L2 distance (no training required)
+        Uses IndexFlatL2 wrapped in IndexIDMap2 for exact search with removal support
         """
         if self.index_type.lower() == "flat":
             # Exact search using L2 distance
-            self.index = faiss.IndexFlatL2(self.dimension)
-            logger.info("Created IndexFlatL2 (exact search)")
+            base_index = faiss.IndexFlatL2(self.dimension)
+            # Wrap in IndexIDMap2 to enable vector removal by ID
+            self.index = faiss.IndexIDMap2(base_index)
+            logger.info("Created IndexFlatL2 wrapped in IndexIDMap2 (exact search with removal support)")
 
         elif self.index_type.lower() == "ivf":
             # Inverted File Index (faster, approximate)
@@ -113,7 +115,11 @@ class FAISSIndex:
             self._next_id += n_vectors
 
         # Add to index
-        self.index.add(vectors)
+        # IndexIDMap2 requires explicit IDs
+        if hasattr(self.index, 'add_with_ids'):
+            self.index.add_with_ids(vectors, ids)
+        else:
+            self.index.add(vectors)
 
         logger.info(f"Added {n_vectors} vectors to index (total: {self.index.ntotal})")
 
@@ -231,15 +237,57 @@ class FAISSIndex:
             raise FileNotFoundError(f"Index file not found: {path}")
 
         # Load index
-        self.index = faiss.read_index(path)
+        loaded_index = faiss.read_index(path)
 
-        # Update next_id based on index size
-        self._next_id = self.index.ntotal
+        # Check if loaded index is already an IndexIDMap2
+        if isinstance(loaded_index, faiss.IndexIDMap2):
+            # Already wrapped, use as-is
+            self.index = loaded_index
 
-        logger.info(
-            f"Loaded FAISS index from {path} "
-            f"({self.index.ntotal} vectors, dim={self.dimension})"
-        )
+            # Get max ID from existing entries to set next_id correctly
+            if self.index.ntotal > 0:
+                # Extract all IDs from the index
+                id_array = faiss.vector_to_array(self.index.id_map)
+                max_id = int(id_array.max())
+                self._next_id = max_id + 1
+            else:
+                self._next_id = 0
+
+            logger.info(
+                f"Loaded IndexIDMap2 from {path} "
+                f"({self.index.ntotal} vectors, next_id={self._next_id})"
+            )
+        else:
+            # Old format (plain IndexFlatL2) - migrate to IndexIDMap2
+            logger.warning(
+                f"Loaded old index format, migrating to IndexIDMap2 "
+                f"({loaded_index.ntotal} vectors)"
+            )
+
+            # IndexIDMap2 requires an empty index, so we reconstruct vectors
+            if loaded_index.ntotal > 0:
+                # Extract all vectors from old index
+                vectors = loaded_index.reconstruct_n(0, loaded_index.ntotal)
+
+                # Create new IndexIDMap2 with empty base index
+                base_index = faiss.IndexFlatL2(self.dimension)
+                self.index = faiss.IndexIDMap2(base_index)
+
+                # Add vectors with sequential IDs (0, 1, 2, ...)
+                ids = np.arange(loaded_index.ntotal, dtype=np.int64)
+                self.index.add_with_ids(vectors, ids)
+
+                # Set next_id for future additions
+                self._next_id = loaded_index.ntotal
+            else:
+                # Empty index, just wrap it
+                base_index = faiss.IndexFlatL2(self.dimension)
+                self.index = faiss.IndexIDMap2(base_index)
+                self._next_id = 0
+
+            # Save migrated index immediately
+            self.save(path)
+            logger.info(f"Migrated and saved index as IndexIDMap2 ({self.index.ntotal} vectors)")
 
     def get_stats(self) -> dict:
         """

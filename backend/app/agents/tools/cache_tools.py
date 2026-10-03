@@ -141,16 +141,112 @@ class CacheInvalidationTool(BaseTool):
                 f"reason={reason}, dry_run={dry_run}"
             )
 
-            # Simulation mode (dry-run only for safety)
+            if dry_run:
+                # Simulation mode
+                return {
+                    "status": "simulated",
+                    "cache_id": cache_id,
+                    "reason": reason,
+                    "action": "would_invalidate",
+                    "message": f"DRY RUN: Would invalidate cache entry {cache_id}",
+                    "details": {
+                        "would_remove_from_redis": True,
+                        "would_remove_from_metadata": True,
+                        "would_remove_from_faiss": True,
+                        "reason": reason
+                    }
+                }
+
+            # Actually invalidate
+            import asyncio
+            from app.cache.redis_store import get_redis_store
+            from app.vectorstore.storage import get_metadata_store
+            from app.vectorstore.faiss_index import get_faiss_index
+            import numpy as np
+
+            removed_from_redis = False
+            removed_from_metadata = False
+            removed_from_faiss = False
+
+            # Remove from Redis
+            try:
+                # Handle async in sync context
+                try:
+                    # Try to get existing event loop
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        # Already in async context - can't use run_until_complete
+                        logger.warning("Cannot invalidate from Redis in async context (tool called from async)")
+                        removed_from_redis = False
+                    else:
+                        # No running loop, safe to use
+                        redis_store = loop.run_until_complete(get_redis_store())
+                        # Use correct Redis key pattern: cache:response:{id}
+                        result = loop.run_until_complete(redis_store.redis.delete(f"cache:response:{cache_id}"))
+                        removed_from_redis = (result > 0)
+                        logger.info(f"Removed {cache_id} from Redis (deleted {result} keys)")
+                except RuntimeError:
+                    # No event loop exists, create one
+                    redis_store = asyncio.run(get_redis_store())
+                    result = asyncio.run(redis_store.redis.delete(f"cache:response:{cache_id}"))
+                    removed_from_redis = (result > 0)
+                    logger.info(f"Removed {cache_id} from Redis (deleted {result} keys)")
+            except Exception as e:
+                logger.error(f"Failed to remove from Redis: {e}")
+
+            # Remove from metadata store and FAISS
+            try:
+                metadata_store = get_metadata_store()
+                faiss_index = get_faiss_index()
+
+                # Find vector_id by searching metadata
+                vector_id_to_remove = None
+                for vid, meta in metadata_store.metadata.items():
+                    if meta.cache_key_hash == cache_id:
+                        vector_id_to_remove = vid
+                        break
+
+                if vector_id_to_remove is not None:
+                    # Remove from FAISS (now supported with IndexIDMap2)
+                    try:
+                        faiss_index.remove_vectors(np.array([vector_id_to_remove], dtype=np.int64))
+                        removed_from_faiss = True
+                        logger.info(f"Removed vector_id={vector_id_to_remove} from FAISS")
+
+                        # Save FAISS index to persist the removal
+                        from app.vectorstore.search import get_search_service
+                        search_service = get_search_service()
+                        search_service.save_index()
+                        logger.info("Saved FAISS index after removal")
+                    except Exception as e:
+                        logger.error(f"Failed to remove from FAISS: {e}")
+
+                    # Remove from metadata
+                    metadata_store.delete(vector_id_to_remove)
+                    metadata_store.save()
+                    removed_from_metadata = True
+                    logger.info(f"Removed vector_id={vector_id_to_remove} from metadata")
+                else:
+                    logger.warning(f"Could not find metadata for cache_id={cache_id}")
+            except Exception as e:
+                logger.error(f"Failed to remove from metadata/FAISS: {e}")
+
+            # Determine overall status based on what was actually removed
+            any_removed = removed_from_redis or removed_from_metadata or removed_from_faiss
+            status = "completed" if any_removed else "not_found"
+            action = "invalidated" if any_removed else "nothing_to_remove"
+            message = f"Invalidated cache entry {cache_id}" if any_removed else f"No entry found for {cache_id}"
+
             return {
-                "status": "simulated",
+                "status": status,
                 "cache_id": cache_id,
                 "reason": reason,
-                "action": "would_invalidate",
-                "message": f"DRY RUN: Would invalidate cache entry {cache_id}",
+                "action": action,
+                "message": message,
                 "details": {
-                    "would_remove_from_redis": True,
-                    "would_mark_inactive_in_db": True,
+                    "removed_from_redis": removed_from_redis,
+                    "removed_from_metadata": removed_from_metadata,
+                    "removed_from_faiss": removed_from_faiss,
                     "reason": reason
                 }
             }

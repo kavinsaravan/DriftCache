@@ -77,6 +77,7 @@ class VectorMetadata(BaseModel):
     tenant_id: str = Field(default="default", description="Tenant namespace")
     system_prompt: Optional[str] = Field(None, description="System prompt used")
     conversation_history: Optional[str] = Field(None, description="Conversation context")
+    cache_key_hash: Optional[str] = Field(None, description="Redis cache key hash")
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     request_params: Dict[str, Any] = Field(default_factory=dict)
     cache_hits: int = Field(default=0, description="Number of times this was reused")
@@ -94,6 +95,7 @@ class VectorMetadata(BaseModel):
             "tenant_id": self.tenant_id,
             "system_prompt": self.system_prompt,
             "conversation_history": self.conversation_history,
+            "cache_key_hash": self.cache_key_hash,
             "timestamp": self.timestamp.isoformat(),
             "request_params": self.request_params,
             "cache_hits": self.cache_hits,
@@ -113,6 +115,7 @@ class VectorMetadata(BaseModel):
         data.setdefault("tenant_id", "default")
         data.setdefault("system_prompt", None)
         data.setdefault("conversation_history", None)
+        data.setdefault("cache_key_hash", None)
 
         return cls(**data)
 

@@ -317,6 +317,123 @@ def test_similarity_threshold():
     assert result2 is not None
 
 
+def test_index_migration_and_id_collision():
+    """
+    Test that old IndexFlatL2 migrates to IndexIDMap2 correctly
+    and that IDs don't collide after removal and restart.
+
+    This tests the critical fix for Bug #2:
+    - Old index format is migrated properly
+    - After removals, _next_id is set to max(existing_ids) + 1, not ntotal
+    - New entries don't overwrite existing vectors after restart
+    """
+    import faiss
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.index') as f:
+        temp_path = f.name
+
+    try:
+        # Step 1: Create old-style IndexFlatL2 (simulate pre-migration index)
+        dimension = 384
+        old_index = faiss.IndexFlatL2(dimension)
+
+        # Add 5 vectors to the old index
+        vectors = np.random.randn(5, dimension).astype(np.float32)
+        old_index.add(vectors)
+
+        # Save the old index (not wrapped in IndexIDMap2)
+        faiss.write_index(old_index, temp_path)
+        print(f"Created old index with {old_index.ntotal} vectors")
+
+        # Step 2: Load the old index (should trigger migration)
+        index1 = FAISSIndex(dimension=dimension)
+        index1.load(temp_path)
+
+        # Verify migration happened
+        assert isinstance(index1.index, faiss.IndexIDMap2), "Index should be migrated to IndexIDMap2"
+        assert index1.index.ntotal == 5, "Should have 5 vectors after migration"
+        assert index1._next_id == 5, "Next ID should be 5 after migration"
+        print(f"Migration successful: {index1.index.ntotal} vectors, next_id={index1._next_id}")
+
+        # Step 3: Remove vectors with IDs 1 and 2
+        ids_to_remove = np.array([1, 2], dtype=np.int64)
+        index1.remove_vectors(ids_to_remove)
+
+        # After removal: ntotal=3, but max_id is still 4
+        assert index1.index.ntotal == 3, "Should have 3 vectors after removal"
+        print(f"After removal: ntotal={index1.index.ntotal}")
+
+        # Save the index with removals
+        index1.save(temp_path)
+
+        # Step 4: Reload the index (simulates restart)
+        index2 = FAISSIndex(dimension=dimension)
+        index2.load(temp_path)
+
+        # Critical check: _next_id should be max(existing_ids) + 1, NOT ntotal
+        # Existing IDs are [0, 3, 4], so max is 4, next should be 5
+        assert index2._next_id == 5, f"Next ID should be 5 (max_id + 1), not {index2._next_id}"
+        assert index2.index.ntotal == 3, "Should still have 3 vectors"
+        print(f"After reload: ntotal={index2.index.ntotal}, next_id={index2._next_id}")
+
+        # Step 5: Add a new vector
+        new_vector = np.random.randn(1, dimension).astype(np.float32)
+        new_ids = index2.add_vectors(new_vector)
+
+        # The new ID should be 5, not 3 (which would collide with existing vector)
+        assert new_ids[0] == 5, f"New ID should be 5, not {new_ids[0]}"
+        assert index2.index.ntotal == 4, "Should have 4 vectors total"
+        print(f"New vector added with ID {new_ids[0]} - no collision! ✓")
+
+        # Step 6: Verify all vectors can be reconstructed (no overwrites)
+        # Get all existing IDs
+        id_array = faiss.vector_to_array(index2.index.id_map)
+        existing_ids = sorted(id_array[:index2.index.ntotal].tolist())
+
+        # Should be [0, 3, 4, 5] (1 and 2 were removed)
+        expected_ids = [0, 3, 4, 5]
+        assert existing_ids == expected_ids, f"IDs should be {expected_ids}, got {existing_ids}"
+        print(f"Existing IDs after all operations: {existing_ids} ✓")
+
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+
+def test_empty_index_migration():
+    """Test that empty old index migrates correctly"""
+    import faiss
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.index') as f:
+        temp_path = f.name
+
+    try:
+        # Create empty old-style index
+        dimension = 384
+        old_index = faiss.IndexFlatL2(dimension)
+        faiss.write_index(old_index, temp_path)
+
+        # Load (should migrate)
+        index = FAISSIndex(dimension=dimension)
+        index.load(temp_path)
+
+        # Should be IndexIDMap2 with 0 vectors
+        assert isinstance(index.index, faiss.IndexIDMap2)
+        assert index.index.ntotal == 0
+        assert index._next_id == 0
+
+        # Should be able to add vectors
+        vectors = np.random.randn(3, dimension).astype(np.float32)
+        ids = index.add_vectors(vectors)
+
+        assert list(ids) == [0, 1, 2]
+        assert index.index.ntotal == 3
+
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+
 if __name__ == "__main__":
     print("Running vector store tests...")
     pytest.main([__file__, "-v", "-m", "not slow"])

@@ -1,5 +1,8 @@
 """
 Pytest tests for FastAPI Gateway endpoints
+
+These are integration tests that require a running server.
+Run with: pytest -m integration
 """
 import pytest
 import httpx
@@ -7,6 +10,9 @@ import json
 
 
 BASE_URL = "http://localhost:8000/api/v1"
+
+# Mark all tests in this file as integration tests
+pytestmark = pytest.mark.integration
 
 
 @pytest.mark.asyncio

@@ -65,7 +65,8 @@ class SemanticSearchService:
         model_name: str,
         tenant_id: str = "default",
         system_prompt: Optional[str] = None,
-        conversation_history: Optional[str] = None
+        conversation_history: Optional[str] = None,
+        cache_key_hash: Optional[str] = None
     ) -> int:
         """
         Add an embedding to the search index
@@ -77,6 +78,7 @@ class SemanticSearchService:
             tenant_id: Tenant namespace
             system_prompt: System prompt used (if any)
             conversation_history: Conversation context (for exact matching)
+            cache_key_hash: Redis cache key hash (for retrieval)
 
         Returns:
             Vector ID assigned by FAISS
@@ -99,6 +101,7 @@ class SemanticSearchService:
             tenant_id=tenant_id,
             system_prompt=system_prompt,
             conversation_history=conversation_history,
+            cache_key_hash=cache_key_hash,
             timestamp=embedding.metadata.timestamp,
             request_params=embedding.metadata.request_params,
             cache_hits=0
@@ -273,43 +276,60 @@ class SemanticSearchService:
 
         # Search for top candidates (not just top-1)
         # This allows filtering and picking the best valid match
-        results = self.search(query_embedding, top_k=10, threshold=threshold)
+        # Start with top_k=10, retry with larger k if all candidates filtered out
+        top_k = 10
+        max_retries = 2
+        retry_count = 0
 
-        # Filter candidates for valid matches
-        valid_candidates = []
-        for result in results.results:
-            metadata = self.metadata_store.get(result.vector_id)
-            if metadata is None:
-                continue
+        while retry_count <= max_retries:
+            results = self.search(query_embedding, top_k=top_k, threshold=threshold)
 
-            # Filter by tenant
-            if tenant_id and metadata.tenant_id != tenant_id:
-                continue
-
-            # Filter by model
-            if model_name and require_same_model:
-                if metadata.model_name != model_name:
+            # Filter candidates for valid matches
+            valid_candidates = []
+            for result in results.results:
+                metadata = self.metadata_store.get(result.vector_id)
+                if metadata is None:
                     continue
 
-            # Filter by system prompt (must match exactly)
-            if system_prompt is not None or metadata.system_prompt is not None:
+                # Filter by tenant
+                if tenant_id and metadata.tenant_id != tenant_id:
+                    continue
+
+                # Filter by model
+                if model_name and require_same_model:
+                    if metadata.model_name != model_name:
+                        continue
+
+                # Filter by system prompt (must match exactly)
                 if system_prompt != metadata.system_prompt:
                     continue
 
-            # Filter by conversation history (must match exactly for multi-turn)
-            if conversation_history is not None or metadata.conversation_history is not None:
+                # Filter by conversation history (must match exactly for multi-turn)
                 if conversation_history != metadata.conversation_history:
                     continue
 
-            # Check TTL expiration
-            if metadata.timestamp:
-                from datetime import datetime, timedelta
-                ttl_seconds = settings.CACHE_TTL_SECONDS
-                expiration = metadata.timestamp + timedelta(seconds=ttl_seconds)
-                if datetime.utcnow() > expiration:
-                    continue
+                # Check TTL expiration
+                if metadata.timestamp:
+                    from datetime import datetime, timedelta
+                    ttl_seconds = settings.CACHE_TTL_SECONDS
+                    expiration = metadata.timestamp + timedelta(seconds=ttl_seconds)
+                    if datetime.utcnow() > expiration:
+                        continue
 
-            valid_candidates.append((result, metadata))
+                valid_candidates.append((result, metadata))
+
+            # If we found valid candidates, break out of retry loop
+            if valid_candidates:
+                break
+
+            # All candidates filtered out - retry with larger k
+            retry_count += 1
+            if retry_count <= max_retries:
+                top_k = top_k * 3  # Triple the search width
+                logger.info(f"All {len(results.results)} candidates filtered out, retrying with top_k={top_k}")
+            else:
+                logger.info("No valid cache match found after filtering and retries")
+                return None
 
         if not valid_candidates:
             logger.info("No valid cache match found after filtering")
@@ -363,13 +383,9 @@ class SemanticSearchService:
         Args:
             index_path: Optional custom path for FAISS index
         """
-        # Default paths
+        # Default path from settings
         if index_path is None:
-            from pathlib import Path
-            base_dir = Path(__file__).parent.parent.parent.parent
-            storage_dir = base_dir / "data" / "cache"
-            storage_dir.mkdir(parents=True, exist_ok=True)
-            index_path = str(storage_dir / "faiss.index")
+            index_path = settings.get_index_path()
 
         # Save FAISS index
         self.faiss_index.save(index_path)
@@ -386,11 +402,9 @@ class SemanticSearchService:
         Args:
             index_path: Optional custom path for FAISS index
         """
-        # Default path
+        # Default path from settings
         if index_path is None:
-            from pathlib import Path
-            base_dir = Path(__file__).parent.parent.parent.parent
-            index_path = str(base_dir / "data" / "cache" / "faiss.index")
+            index_path = settings.get_index_path()
 
         # Load FAISS index
         try:
@@ -402,6 +416,48 @@ class SemanticSearchService:
         self.metadata_store.load()
 
         logger.info("Loaded index and metadata")
+
+    def remove_expired_vectors(self, ttl_seconds: Optional[int] = None) -> int:
+        """
+        Remove expired vectors from FAISS index and metadata
+
+        Args:
+            ttl_seconds: Time-to-live in seconds. Defaults to settings.CACHE_TTL_SECONDS
+
+        Returns:
+            Number of vectors removed
+        """
+        from datetime import datetime, timedelta
+        from app.core.config import settings
+
+        if ttl_seconds is None:
+            ttl_seconds = settings.CACHE_TTL_SECONDS
+
+        now = datetime.utcnow()
+        expired_vector_ids = []
+
+        # Find expired entries in metadata
+        for vector_id, metadata in self.metadata_store.metadata.items():
+            if metadata.timestamp:
+                age_seconds = (now - metadata.timestamp).total_seconds()
+                if age_seconds > ttl_seconds:
+                    expired_vector_ids.append(vector_id)
+
+        if not expired_vector_ids:
+            logger.info("No expired vectors to remove")
+            return 0
+
+        # Remove from FAISS index
+        expired_ids_array = np.array(expired_vector_ids, dtype=np.int64)
+        self.faiss_index.remove_vectors(expired_ids_array)
+
+        # Remove from metadata
+        for vector_id in expired_vector_ids:
+            self.metadata_store.delete(vector_id)
+
+        logger.info(f"Removed {len(expired_vector_ids)} expired vectors from index")
+
+        return len(expired_vector_ids)
 
     def clear_index(self) -> None:
         """Clear all data from index"""

@@ -190,7 +190,7 @@ class LangGraphSupervisor:
             "false_hit_rate": quality_result.get("false_hit_rate", 0),
             "false_miss_rate": quality_result.get("false_miss_rate", 0),
             "cache_hit_rate": metrics_result.get("cache_hit_rate", 0),
-            "stale_vector_ratio": 0.15,  # Estimated from index metadata
+            "stale_vector_ratio": self._compute_stale_vector_ratio(),
         }
 
         return {"system_state": system_state, "tenant_id": tenant_id}
@@ -240,11 +240,11 @@ class LangGraphSupervisor:
 
         # Execute the action
         if action["agent"] == "threshold_optimizer":
-            # Evaluation dataset (would be loaded from evaluation service in production)
-            eval_dataset = [
-                {"similarity": 0.92, "should_cache": True},
-                {"similarity": 0.88, "should_cache": False},
-            ]
+            # Load real evaluation dataset from labeled prompts
+            from app.evaluation.dataset_loader import get_cached_evaluation_dataset
+            eval_dataset = get_cached_evaluation_dataset()
+
+            logger.info(f"[{run_id}] Loaded {len(eval_dataset)} evaluation pairs for threshold optimization")
 
             result = self.threshold_optimizer.optimize_threshold(
                 current_threshold=state["system_state"].get("current_threshold", 0.90),
@@ -480,6 +480,24 @@ class LangGraphSupervisor:
             session.add(supervisor_run)
             session.commit()
             logger.info(f"Stored supervisor run: {supervisor_run.id}")
+
+    def _compute_stale_vector_ratio(self) -> float:
+        """
+        Compute real stale vector ratio from metadata store
+
+        Returns:
+            Ratio of expired vectors to total vectors
+        """
+        try:
+            from app.vectorstore.storage import get_metadata_store
+            metadata_store = get_metadata_store()
+            ratio = metadata_store.get_stale_vector_ratio()
+            logger.debug(f"Computed stale_vector_ratio: {ratio:.3f}")
+            return ratio
+        except Exception as e:
+            logger.error(f"Failed to compute stale_vector_ratio: {e}")
+            # Return conservative estimate on error
+            return 0.15
 
     def run_remediation_workflow(
         self,

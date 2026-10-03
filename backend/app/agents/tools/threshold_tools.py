@@ -128,12 +128,26 @@ class UpdateThresholdTool(BaseTool):
                 # Get current threshold
                 old_threshold = get_active_threshold(db, tenant_id=tenant_id)
 
-                # Estimate impact
+                # Compute real impact using evaluation dataset
                 direction = "increase" if new_threshold > old_threshold else "decrease"
-                impact = abs(new_threshold - old_threshold)
 
-                estimated_precision_change = impact * 0.05 if direction == "increase" else -impact * 0.03
-                estimated_recall_change = -impact * 0.10 if direction == "increase" else impact * 0.15
+                # Load evaluation dataset and compute metrics at both thresholds
+                from app.evaluation.dataset_loader import get_cached_evaluation_dataset
+                from app.optimization.threshold_search import ThresholdSearcher
+
+                eval_dataset = get_cached_evaluation_dataset()
+                searcher = ThresholdSearcher()
+
+                # Evaluate at old threshold
+                old_metrics = searcher._evaluate_threshold(old_threshold, eval_dataset)
+
+                # Evaluate at new threshold
+                new_metrics = searcher._evaluate_threshold(new_threshold, eval_dataset)
+
+                # Calculate actual changes
+                estimated_precision_change = new_metrics["precision"] - old_metrics["precision"]
+                estimated_recall_change = new_metrics["recall"] - old_metrics["recall"]
+                estimated_false_hit_change = new_metrics["false_hit_rate"] - old_metrics["false_hit_rate"]
 
                 if dry_run:
                     # Simulation mode
@@ -149,6 +163,13 @@ class UpdateThresholdTool(BaseTool):
                         "estimated_impact": {
                             "precision_change": f"{estimated_precision_change:+.2%}",
                             "recall_change": f"{estimated_recall_change:+.2%}",
+                            "false_hit_change": f"{estimated_false_hit_change:+.2%}",
+                            "old_precision": round(old_metrics["precision"], 4),
+                            "new_precision": round(new_metrics["precision"], 4),
+                            "old_recall": round(old_metrics["recall"], 4),
+                            "new_recall": round(new_metrics["recall"], 4),
+                            "old_false_hit_rate": round(old_metrics["false_hit_rate"], 4),
+                            "new_false_hit_rate": round(new_metrics["false_hit_rate"], 4),
                             "recommendation": (
                                 "Increase precision, slight recall drop" if direction == "increase"
                                 else "Increase recall, slight precision risk"
