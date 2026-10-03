@@ -168,36 +168,18 @@ class IndexRebuilder:
         """
         Execute actual index rebuild
 
-        Args:
-            rebuild_id: Rebuild job ID
-            old_version: Current index version
-            reason: Rebuild reason
-            started_at: Start time
-            tenant_id: Optional tenant ID
-
-        Returns:
-            Rebuild result
+        Not yet implemented for safety - use dry_run=True for simulation.
         """
-        logger.info(f"[{rebuild_id}] EXECUTING REBUILD")
-
-        # TODO: Implement actual rebuild in production
-        # Steps:
-        # 1. Load active cache entries from database
-        # 2. Load or regenerate embeddings
-        # 3. Build new FAISS index
-        # 4. Save index to temporary file
-        # 5. Validate retrieval performance
-        # 6. Create new index version record
-        # 7. Swap active index pointer
-        # 8. Clean up old index (keep as backup)
-
-        return {
-            "rebuild_id": rebuild_id,
-            "status": "not_implemented",
-            "message": "Full rebuild implementation pending - currently in development",
-            "reason": reason,
-            "tenant_id": tenant_id
-        }
+        raise NotImplementedError(
+            "Actual index rebuild not implemented. "
+            "Use dry_run=True for impact simulation. "
+            "Production rebuild requires: "
+            "1. Load active cache entries from database, "
+            "2. Regenerate embeddings, "
+            "3. Build new FAISS index, "
+            "4. Validate performance, "
+            "5. Atomic swap with rollback support"
+        )
 
     def validate_index(
         self,

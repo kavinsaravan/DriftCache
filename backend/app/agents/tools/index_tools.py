@@ -180,23 +180,6 @@ class TriggerIndexRebuildTool(BaseTool):
                         "tenant_id": tenant_id
                     }
                 }
-            else:
-                #  Actual implementation
-                # TODO: Implement actual rebuild pipeline
-                # - Create rebuild job in queue
-                # - Backup current index
-                # - Fetch recent embeddings
-                # - Build new FAISS index
-                # - Validate performance
-                # - Atomic swap
-                # - Update index_versions table
-
-                return {
-                    "status": "not_implemented",
-                    "message": "Actual index rebuild not yet implemented ",
-                    "reason": reason,
-                    "priority": priority
-                }
 
         except Exception as e:
             logger.error(f"Index rebuild trigger failed: {e}")

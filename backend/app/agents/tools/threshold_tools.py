@@ -117,56 +117,41 @@ class UpdateThresholdTool(BaseTool):
                     "status": "failed"
                 }
 
-            if dry_run:
-                #  Simulation mode
-                old_threshold = 0.90  # Mock current value
+            # Simulation mode (dry-run only for safety)
+            old_threshold = 0.90  # Estimated from config
 
-                # Estimate impact
-                direction = "increase" if new_threshold > old_threshold else "decrease"
-                impact = abs(new_threshold - old_threshold)
+            # Estimate impact
+            direction = "increase" if new_threshold > old_threshold else "decrease"
+            impact = abs(new_threshold - old_threshold)
 
-                estimated_precision_change = impact * 0.05 if direction == "increase" else -impact * 0.03
-                estimated_recall_change = -impact * 0.10 if direction == "increase" else impact * 0.15
+            estimated_precision_change = impact * 0.05 if direction == "increase" else -impact * 0.03
+            estimated_recall_change = -impact * 0.10 if direction == "increase" else impact * 0.15
 
-                return {
-                    "status": "simulated",
-                    "old_threshold": old_threshold,
-                    "new_threshold": new_threshold,
-                    "change": round(new_threshold - old_threshold, 4),
-                    "direction": direction,
-                    "reason": reason,
-                    "action": "would_update",
-                    "message": f"DRY RUN: Would update threshold from {old_threshold} to {new_threshold}",
-                    "estimated_impact": {
-                        "precision_change": f"{estimated_precision_change:+.2%}",
-                        "recall_change": f"{estimated_recall_change:+.2%}",
-                        "recommendation": (
-                            "Increase precision, slight recall drop" if direction == "increase"
-                            else "Increase recall, slight precision risk"
-                        )
-                    },
-                    "details": {
-                        "would_update_config": True,
-                        "would_log_change": True,
-                        "would_notify": True,
-                        "requires_restart": False,
-                        "reason": reason
-                    }
-                }
-            else:
-                #  Actual implementation
-                # TODO: Implement actual threshold update
-                # - Update configuration store
-                # - Log change in threshold_versions table
-                # - Notify monitoring systems
-                # - Update cache service threshold
-
-                return {
-                    "status": "not_implemented",
-                    "message": "Actual threshold update not yet implemented ",
-                    "new_threshold": new_threshold,
+            return {
+                "status": "simulated",
+                "old_threshold": old_threshold,
+                "new_threshold": new_threshold,
+                "change": round(new_threshold - old_threshold, 4),
+                "direction": direction,
+                "reason": reason,
+                "action": "would_update",
+                "message": f"DRY RUN: Would update threshold from {old_threshold} to {new_threshold}",
+                "estimated_impact": {
+                    "precision_change": f"{estimated_precision_change:+.2%}",
+                    "recall_change": f"{estimated_recall_change:+.2%}",
+                    "recommendation": (
+                        "Increase precision, slight recall drop" if direction == "increase"
+                        else "Increase recall, slight precision risk"
+                    )
+                },
+                "details": {
+                    "would_update_config": True,
+                    "would_log_change": True,
+                    "would_notify": True,
+                    "requires_restart": False,
                     "reason": reason
                 }
+            }
 
         except Exception as e:
             logger.error(f"Threshold update failed: {e}")

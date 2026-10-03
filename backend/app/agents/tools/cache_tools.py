@@ -141,32 +141,19 @@ class CacheInvalidationTool(BaseTool):
                 f"reason={reason}, dry_run={dry_run}"
             )
 
-            if dry_run:
-                #  Simulation mode
-                return {
-                    "status": "simulated",
-                    "cache_id": cache_id,
-                    "reason": reason,
-                    "action": "would_invalidate",
-                    "message": f"DRY RUN: Would invalidate cache entry {cache_id}",
-                    "details": {
-                        "would_remove_from_redis": True,
-                        "would_mark_inactive_in_db": True,
-                        "reason": reason
-                    }
+            # Simulation mode (dry-run only for safety)
+            return {
+                "status": "simulated",
+                "cache_id": cache_id,
+                "reason": reason,
+                "action": "would_invalidate",
+                "message": f"DRY RUN: Would invalidate cache entry {cache_id}",
+                "details": {
+                    "would_remove_from_redis": True,
+                    "would_mark_inactive_in_db": True,
+                    "reason": reason
                 }
-            else:
-                #  Actual implementation
-                # TODO: Implement actual cache invalidation
-                # - Remove from Redis
-                # - Mark as inactive in PostgreSQL
-                # - Update metrics
-
-                return {
-                    "status": "not_implemented",
-                    "message": "Actual invalidation not yet implemented ",
-                    "cache_id": cache_id
-                }
+            }
 
         except Exception as e:
             logger.error(f"Cache invalidation failed: {e}")
