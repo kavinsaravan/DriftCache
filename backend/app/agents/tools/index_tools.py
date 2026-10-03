@@ -69,17 +69,18 @@ class IndexStatusTool(BaseTool):
 
             # Get last rebuild time from index file modification time
             last_rebuild = None
+            last_rebuild_dt = None
             days_since_rebuild = None
-            index_path = faiss_index.index_path if faiss_index else None
 
-            if index_path and os.path.exists(index_path):
+            # Construct index path (same as in search.py)
+            base_dir = Path(__file__).parent.parent.parent.parent
+            index_path = str(base_dir / "data" / "cache" / "faiss.index")
+
+            if os.path.exists(index_path):
                 mtime = os.path.getmtime(index_path)
                 last_rebuild_dt = datetime.fromtimestamp(mtime)
                 last_rebuild = last_rebuild_dt.isoformat() + "Z"
                 days_since_rebuild = (datetime.utcnow() - last_rebuild_dt).days
-            else:
-                last_rebuild = None
-                days_since_rebuild = None
 
             # Determine health status
             health_status = "healthy"

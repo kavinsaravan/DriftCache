@@ -31,7 +31,9 @@ def load_evaluation_dataset(
     """
     # Default to built-in datasets
     if dataset_paths is None:
-        base_path = Path(__file__).parent.parent.parent / "benchmarks" / "datasets"
+        # Path is: backend/app/evaluation/dataset_loader.py
+        # We need: benchmarks/datasets/ (3 levels up from backend/)
+        base_path = Path(__file__).parents[3] / "benchmarks" / "datasets"
         dataset_paths = [
             str(base_path / "semantic_duplicates.json"),
             str(base_path / "hard_negatives.json"),
@@ -51,15 +53,18 @@ def load_evaluation_dataset(
                         "should_match": group["expected_behavior"] == "should_match"
                     })
         except FileNotFoundError:
-            logger.warning(f"Dataset file not found: {path}")
+            logger.error(f"Dataset file not found: {path} (check if benchmarks/ folder is deployed)")
             continue
         except Exception as e:
             logger.error(f"Error loading dataset {path}: {e}")
             continue
 
     if not all_groups:
-        logger.error("No datasets loaded, returning empty evaluation set")
-        return []
+        raise ValueError(
+            "Failed to load any evaluation datasets. "
+            "Ensure benchmarks/datasets/ folder exists and contains semantic_duplicates.json and hard_negatives.json. "
+            "Cannot run threshold optimization with empty dataset."
+        )
 
     logger.info(f"Loaded {len(all_groups)} prompt groups")
 

@@ -237,15 +237,42 @@ class FAISSIndex:
             raise FileNotFoundError(f"Index file not found: {path}")
 
         # Load index
-        self.index = faiss.read_index(path)
+        loaded_index = faiss.read_index(path)
 
-        # Update next_id based on index size
-        self._next_id = self.index.ntotal
+        # Check if loaded index is already an IndexIDMap2
+        if isinstance(loaded_index, faiss.IndexIDMap2):
+            # Already wrapped, use as-is
+            self.index = loaded_index
 
-        logger.info(
-            f"Loaded FAISS index from {path} "
-            f"({self.index.ntotal} vectors, dim={self.dimension})"
-        )
+            # Get max ID from existing entries to set next_id correctly
+            if self.index.ntotal > 0:
+                # Extract all IDs from the index
+                id_array = faiss.vector_to_array(self.index.id_map)
+                max_id = int(id_array.max())
+                self._next_id = max_id + 1
+            else:
+                self._next_id = 0
+
+            logger.info(
+                f"Loaded IndexIDMap2 from {path} "
+                f"({self.index.ntotal} vectors, next_id={self._next_id})"
+            )
+        else:
+            # Old format (plain IndexFlatL2) - migrate to IndexIDMap2
+            logger.warning(
+                f"Loaded old index format, migrating to IndexIDMap2 "
+                f"({loaded_index.ntotal} vectors)"
+            )
+
+            # Wrap in IndexIDMap2
+            self.index = faiss.IndexIDMap2(loaded_index)
+
+            # For old indices, ntotal is safe since IDs were sequential
+            self._next_id = loaded_index.ntotal
+
+            # Save migrated index immediately
+            self.save(path)
+            logger.info(f"Migrated and saved index as IndexIDMap2")
 
     def get_stats(self) -> dict:
         """

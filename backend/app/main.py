@@ -75,10 +75,35 @@ async def lifespan(app: FastAPI):
         logger.error(f"Redis URL being used: {settings.get_redis_url()[:20]}...")  # Log first 20 chars for debugging
         logger.warning("Running without Redis - cache will use fallback storage")
 
+    # Clean up expired vectors from FAISS index on startup
+    try:
+        from app.vectorstore.search import get_search_service
+        search_service = get_search_service()
+        removed_count = search_service.remove_expired_vectors()
+        if removed_count > 0:
+            logger.info(f"Removed {removed_count} expired vectors from FAISS index")
+            # Save index after cleanup
+            search_service.save_index()
+    except Exception as e:
+        logger.warning(f"Failed to clean up expired vectors on startup: {e}")
+
+    # TODO: Add periodic cleanup of expired vectors (e.g., daily scheduled task)
+    # For now, cleanup runs on startup and can be triggered by index rebuild agent
+
     yield
 
     # Shutdown
     logger.info("Shutting down DriftCache API...")
+
+    # Save FAISS index to disk before shutdown
+    try:
+        from app.vectorstore.search import get_search_service
+        search_service = get_search_service()
+        search_service.save_index()
+        logger.info("FAISS index saved to disk")
+    except Exception as e:
+        logger.error(f"Failed to save FAISS index on shutdown: {e}")
+
     await shutdown_redis()
     logger.info("Redis connection closed")
     shutdown_db()
