@@ -40,7 +40,7 @@ def run_supervisor_workflow(
         trigger_reason: Why workflow was triggered
         trigger_source: manual, alert, scheduled
         tenant_id: Optional tenant isolation
-        dry_run: If True, simulate actions (default for Week 7)
+        dry_run: If True, simulate actions without applying changes
 
     Returns:
         Complete workflow result with diagnosis, actions, and validation

@@ -32,7 +32,7 @@ def run_cache_maintenance(
     2. Analyze drift severity
     3. Analyze cache quality (precision, recall, false rates)
     4. Decide action based on priority logic
-    5. Execute action (dry-run mode for Week 6)
+    5. Execute action (supports dry-run mode)
     6. Validate result
     7. Write audit report to database
 

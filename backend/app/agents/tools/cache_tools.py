@@ -110,7 +110,7 @@ class CacheInvalidationTool(BaseTool):
     """
     Tool for invalidating stale or risky cache entries
 
-    For Week 6, runs in dry-run mode by default
+    Runs in dry-run mode by default for safety
     """
     name: str = "invalidate_cache_entry"
     description: str = """
@@ -121,8 +121,8 @@ class CacheInvalidationTool(BaseTool):
     - Response is outdated
     - False cache hit detected
 
-    By default runs in dry-run mode (Week 6).
-    Week 7 will enable actual invalidation.
+    By default runs in dry-run mode .
+    Will enable actual invalidation.
 
     Returns success status and simulation details.
     """
@@ -142,7 +142,7 @@ class CacheInvalidationTool(BaseTool):
             )
 
             if dry_run:
-                # Week 6: Simulation mode
+                #  Simulation mode
                 return {
                     "status": "simulated",
                     "cache_id": cache_id,
@@ -156,7 +156,7 @@ class CacheInvalidationTool(BaseTool):
                     }
                 }
             else:
-                # Week 7: Actual implementation
+                #  Actual implementation
                 # TODO: Implement actual cache invalidation
                 # - Remove from Redis
                 # - Mark as inactive in PostgreSQL
@@ -164,7 +164,7 @@ class CacheInvalidationTool(BaseTool):
 
                 return {
                     "status": "not_implemented",
-                    "message": "Actual invalidation not yet implemented (Week 7)",
+                    "message": "Actual invalidation not yet implemented ",
                     "cache_id": cache_id
                 }
 

@@ -49,8 +49,8 @@ class IndexStatusTool(BaseTool):
         try:
             logger.info(f"Getting index status for tenant_id={tenant_id}")
 
-            # Week 6: Return mock status
-            # Week 7: Will query actual FAISS index metadata
+            #  Return mock status
+            #  Will query actual FAISS index metadata
             return {
                 "index_size": 15234,
                 "last_rebuild": "2024-06-10T08:30:00Z",
@@ -109,8 +109,8 @@ class TriggerIndexRebuildTool(BaseTool):
     - high: Scheduled within 6 hours
     - urgent: Immediate rebuild (use with caution)
 
-    By default runs in dry-run mode (Week 6).
-    Week 7 will implement actual rebuild pipeline.
+    By default runs in dry-run mode .
+    Will implement actual rebuild pipeline.
     """
     args_schema: type[BaseModel] = TriggerRebuildInput
 
@@ -137,7 +137,7 @@ class TriggerIndexRebuildTool(BaseTool):
                 }
 
             if dry_run:
-                # Week 6: Simulation mode
+                #  Simulation mode
                 job_id = f"rebuild_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
 
                 # Estimate rebuild time based on index size
@@ -181,7 +181,7 @@ class TriggerIndexRebuildTool(BaseTool):
                     }
                 }
             else:
-                # Week 7: Actual implementation
+                #  Actual implementation
                 # TODO: Implement actual rebuild pipeline
                 # - Create rebuild job in queue
                 # - Backup current index
@@ -193,7 +193,7 @@ class TriggerIndexRebuildTool(BaseTool):
 
                 return {
                     "status": "not_implemented",
-                    "message": "Actual index rebuild not yet implemented (Week 7)",
+                    "message": "Actual index rebuild not yet implemented ",
                     "reason": reason,
                     "priority": priority
                 }

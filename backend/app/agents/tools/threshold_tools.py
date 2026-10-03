@@ -42,8 +42,8 @@ class GetThresholdTool(BaseTool):
         try:
             logger.info(f"Getting current threshold for tenant_id={tenant_id}")
 
-            # Week 6: Return mock configuration
-            # Week 7: Will integrate with actual config store
+            #  Return mock configuration
+            #  Will integrate with actual config store
             return {
                 "current_threshold": 0.90,
                 "last_updated": datetime.utcnow().isoformat(),
@@ -89,8 +89,8 @@ class UpdateThresholdTool(BaseTool):
       * Recall needs improvement
       * Missing cost savings with good precision
 
-    By default runs in dry-run mode (Week 6).
-    Week 7 will enable actual threshold updates.
+    By default runs in dry-run mode .
+    Will enable actual threshold updates.
 
     Returns success status and impact simulation.
     """
@@ -118,7 +118,7 @@ class UpdateThresholdTool(BaseTool):
                 }
 
             if dry_run:
-                # Week 6: Simulation mode
+                #  Simulation mode
                 old_threshold = 0.90  # Mock current value
 
                 # Estimate impact
@@ -154,7 +154,7 @@ class UpdateThresholdTool(BaseTool):
                     }
                 }
             else:
-                # Week 7: Actual implementation
+                #  Actual implementation
                 # TODO: Implement actual threshold update
                 # - Update configuration store
                 # - Log change in threshold_versions table
@@ -163,7 +163,7 @@ class UpdateThresholdTool(BaseTool):
 
                 return {
                     "status": "not_implemented",
-                    "message": "Actual threshold update not yet implemented (Week 7)",
+                    "message": "Actual threshold update not yet implemented ",
                     "new_threshold": new_threshold,
                     "reason": reason
                 }

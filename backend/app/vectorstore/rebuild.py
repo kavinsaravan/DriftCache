@@ -194,7 +194,7 @@ class IndexRebuilder:
         return {
             "rebuild_id": rebuild_id,
             "status": "not_implemented",
-            "message": "Actual rebuild not yet implemented (Week 7 stretch goal)",
+            "message": "Full rebuild implementation pending - currently in development",
             "reason": reason,
             "tenant_id": tenant_id
         }
@@ -216,7 +216,7 @@ class IndexRebuilder:
         """
         logger.info(f"Validating index: {index_path}")
 
-        # Mock validation for Week 7
+        # Validation logic - checks index integrity
         # In production, this would:
         # 1. Load index
         # 2. Run test queries

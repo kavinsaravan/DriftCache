@@ -35,7 +35,7 @@ class OptimizationConstraints:
     min_hours_between_changes: int = 6  # Prevent too frequent changes
 
     # Dry-run mode
-    dry_run: bool = True  # Week 7 default: simulation only
+    dry_run: bool = True  # Default: simulation only
 
 
 class OptimizationPolicy:

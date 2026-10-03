@@ -1,7 +1,7 @@
 """
-Test script for FastAPI Gateway endpoints
+Pytest tests for FastAPI Gateway endpoints
 """
-import asyncio
+import pytest
 import httpx
 import json
 
@@ -9,19 +9,27 @@ import json
 BASE_URL = "http://localhost:8000/api/v1"
 
 
+@pytest.mark.asyncio
 async def test_models_endpoint():
-    """Test /v1/models endpoint"""
-    print("\n=== Testing /v1/models ===")
+    """Test /v1/models endpoint returns valid model list"""
     async with httpx.AsyncClient() as client:
         response = await client.get(f"{BASE_URL}/models")
-        print(f"Status Code: {response.status_code}")
-        print(f"Response: {json.dumps(response.json(), indent=2)}")
+
+        # Assert successful response
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+
+        # Parse and validate response structure
+        data = response.json()
+        assert "object" in data, "Response missing 'object' field"
+        assert data["object"] == "list", f"Expected object='list', got {data.get('object')}"
+        assert "data" in data, "Response missing 'data' field"
+        assert isinstance(data["data"], list), "data field should be a list"
+        assert len(data["data"]) > 0, "Model list should not be empty"
 
 
+@pytest.mark.asyncio
 async def test_chat_completion_non_streaming():
-    """Test /v1/chat/completions (non-streaming)"""
-    print("\n=== Testing /v1/chat/completions (non-streaming) ===")
-
+    """Test /v1/chat/completions returns valid non-streaming response"""
     payload = {
         "model": "gpt-4",
         "messages": [
@@ -37,14 +45,24 @@ async def test_chat_completion_non_streaming():
             f"{BASE_URL}/chat/completions",
             json=payload
         )
-        print(f"Status Code: {response.status_code}")
-        print(f"Response: {json.dumps(response.json(), indent=2)}")
+
+        # Assert successful response
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+
+        # Validate response structure
+        data = response.json()
+        assert "id" in data, "Response missing 'id' field"
+        assert "object" in data, "Response missing 'object' field"
+        assert data["object"] == "chat.completion", f"Expected chat.completion, got {data.get('object')}"
+        assert "choices" in data, "Response missing 'choices' field"
+        assert len(data["choices"]) > 0, "Should have at least one choice"
+        assert "message" in data["choices"][0], "Choice missing 'message' field"
+        assert "content" in data["choices"][0]["message"], "Message missing 'content'"
 
 
+@pytest.mark.asyncio
 async def test_chat_completion_streaming():
-    """Test /v1/chat/completions (streaming)"""
-    print("\n=== Testing /v1/chat/completions (streaming) ===")
-
+    """Test /v1/chat/completions streaming returns SSE chunks"""
     payload = {
         "model": "claude-3-haiku",
         "messages": [
@@ -61,39 +79,17 @@ async def test_chat_completion_streaming():
             f"{BASE_URL}/chat/completions",
             json=payload
         ) as response:
-            print(f"Status Code: {response.status_code}")
-            print("Streaming response:")
+            # Assert streaming started successfully
+            assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+
+            # Collect chunks
+            chunks_received = 0
             async for chunk in response.aiter_text():
                 if chunk.strip():
-                    print(chunk, end='', flush=True)
+                    chunks_received += 1
+
+            # Assert we received streaming data
+            assert chunks_received > 0, "Should receive at least one streaming chunk"
 
 
-async def main():
-    """Run all tests"""
-    print("DriftCache Gateway API Tests")
-    print("=" * 50)
-
-    try:
-        # Test 1: Models endpoint
-        await test_models_endpoint()
-
-        # Test 2: Non-streaming completion
-        await test_chat_completion_non_streaming()
-
-        # Test 3: Streaming completion
-        await test_chat_completion_streaming()
-
-        print("\n\n" + "=" * 50)
-        print("All tests completed!")
-
-    except httpx.ConnectError:
-        print("\nError: Could not connect to the server.")
-        print("Make sure the FastAPI server is running on http://localhost:8000")
-        print("\nTo start the server, run:")
-        print("  cd backend && uvicorn app.main:app --reload")
-    except Exception as e:
-        print(f"\nError occurred: {e}")
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+# Run with: pytest backend/tests/test_gateway.py -v
