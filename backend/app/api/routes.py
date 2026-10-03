@@ -1,10 +1,14 @@
 """
 Main API router
-"""
-from fastapi import APIRouter
-from app.api.endpoints import chat, models, evaluation, metrics, drift, agents, supervisor, benchmark, vectorstore, training
 
-api_router = APIRouter()
+All endpoints require API key authentication
+"""
+from fastapi import APIRouter, Depends
+from app.api.endpoints import chat, models, evaluation, metrics, drift, agents, supervisor, benchmark, vectorstore, training
+from app.core.auth import verify_api_key
+
+# Protect all endpoints with API key authentication
+api_router = APIRouter(dependencies=[Depends(verify_api_key)])
 
 # OpenAI-compatible endpoints
 api_router.include_router(models.router, tags=["models"])

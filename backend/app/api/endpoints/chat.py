@@ -28,7 +28,6 @@ from app.models.schemas import (
 from app.providers.router import provider_router
 from app.services.streaming import StreamCollector, create_cached_stream
 from app.services.cache_recorder import get_cache_recorder
-from app.core.auth import verify_api_key
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -37,14 +36,13 @@ cache_recorder = get_cache_recorder()
 
 @router.post("/chat/completions", response_model=None)
 async def create_chat_completion(
-    request: ChatCompletionRequest,
-    api_key: str = Depends(verify_api_key)
+    request: ChatCompletionRequest
 ) -> Union[ChatCompletionResponse, StreamingResponse]:
     """
     OpenAI-compatible chat completion endpoint
 
     Supports:
-    - API key authentication via X-API-Key header
+    - API key authentication via Authorization: Bearer or X-API-Key header
     - Non-streaming responses with cache check/store
     - Streaming responses (SSE) with cache check/store
     - Cache hits return cached content (streamed or non-streamed)

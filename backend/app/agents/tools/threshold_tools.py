@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 class GetThresholdInput(BaseModel):
     """Input schema for get threshold tool"""
-    tenant_id: Optional[str] = Field(None, description="Optional tenant ID")
+    tenant_id: str = Field("default", description="Tenant ID")
 
 
 class GetThresholdTool(BaseTool):
@@ -39,7 +39,7 @@ class GetThresholdTool(BaseTool):
     """
     args_schema: type[BaseModel] = GetThresholdInput
 
-    def _run(self, tenant_id: Optional[str] = None) -> Dict[str, Any]:
+    def _run(self, tenant_id: str = "default") -> Dict[str, Any]:
         """Get current threshold from database"""
         try:
             logger.info(f"Getting current threshold for tenant_id={tenant_id}")

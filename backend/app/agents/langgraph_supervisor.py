@@ -20,7 +20,8 @@ from app.agents.tools.drift_tools import DriftAnalysisTool
 from app.agents.tools.cache_tools import CacheQualityTool
 from app.agents.tools.metrics_tools import MetricsSummaryTool
 from app.models.supervisor_run import SupervisorRun
-from app.database.session import get_db_manager
+from app.database.session import get_db_manager, SessionLocal
+from app.services.threshold_config import get_active_threshold
 
 logger = logging.getLogger(__name__)
 
@@ -157,15 +158,22 @@ class LangGraphSupervisor:
         """Node: Load current system metrics"""
         logger.info(f"[{state['run_id']}] Loading system state...")
 
-        tenant_id = state.get("tenant_id")
+        tenant_id = state.get("tenant_id") or "default"
+
+        # Get current threshold from database
+        db = SessionLocal()
+        try:
+            current_threshold = get_active_threshold(db, tenant_id=tenant_id)
+        finally:
+            db.close()
 
         # Get drift status
         drift_result = self.drift_tool._run(tenant_id=tenant_id)
 
-        # Get cache quality
+        # Get cache quality (using actual DB threshold)
         quality_result = self.quality_tool._run(
             dataset_name="default",
-            threshold=0.90,
+            threshold=current_threshold,
             tenant_id=tenant_id
         )
 
@@ -173,6 +181,7 @@ class LangGraphSupervisor:
         metrics_result = self.metrics_tool._run(period="24h", tenant_id=tenant_id)
 
         system_state = {
+            "current_threshold": current_threshold,
             "drift_severity": drift_result.get("severity", "no_drift"),
             "drift_score": drift_result.get("drift_score", 0),
             "precision": quality_result.get("precision", 0),
@@ -237,7 +246,7 @@ class LangGraphSupervisor:
             ]
 
             result = self.threshold_optimizer.optimize_threshold(
-                current_threshold=0.90,
+                current_threshold=state["system_state"].get("current_threshold", 0.90),
                 current_metrics=state["system_state"],
                 evaluation_dataset=eval_dataset,
                 drift_severity=state["system_state"].get("drift_severity"),

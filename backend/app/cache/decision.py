@@ -56,7 +56,8 @@ class CacheDecisionEngine:
         similarity: Optional[float],
         requested_model: str,
         requested_system_prompt: Optional[str] = None,
-        tenant_id: str = "default"
+        tenant_id: str = "default",
+        threshold: Optional[float] = None
     ) -> CacheDecisionResult:
         """
         Evaluate whether to use a cached response
@@ -67,11 +68,15 @@ class CacheDecisionEngine:
             requested_model: Model requested by user
             requested_system_prompt: System prompt from request
             tenant_id: Tenant namespace
+            threshold: Similarity threshold override (uses config if None)
 
         Returns:
             CacheDecisionResult with decision and reasoning
         """
         start_time = datetime.utcnow()
+
+        # Use provided threshold or fall back to config
+        active_threshold = threshold if threshold is not None else self.config.similarity_threshold
 
         # No cached response found
         if cached_response is None:
@@ -86,7 +91,7 @@ class CacheDecisionEngine:
             )
 
         # Check 1: Similarity threshold
-        similarity_ok = self._check_similarity(similarity)
+        similarity_ok = self._check_similarity(similarity, active_threshold)
 
         # Check 2: Expiration
         expired_ok = self._check_expiration(cached_response)
@@ -114,7 +119,8 @@ class CacheDecisionEngine:
             system_ok=system_ok,
             tenant_ok=tenant_ok,
             similarity=similarity,
-            cached_response=cached_response
+            cached_response=cached_response,
+            active_threshold=active_threshold
         )
 
         # Calculate evaluation time
@@ -135,16 +141,16 @@ class CacheDecisionEngine:
         logger.info(
             f"Cache decision: {decision.value} "
             f"(similarity={similarity or 0:.3f}, "
-            f"threshold={self.config.similarity_threshold})"
+            f"threshold={active_threshold})"
         )
 
         return result
 
-    def _check_similarity(self, similarity: Optional[float]) -> bool:
+    def _check_similarity(self, similarity: Optional[float], threshold: float) -> bool:
         """Check if similarity meets threshold"""
         if similarity is None:
             return False
-        return similarity >= self.config.similarity_threshold
+        return similarity >= threshold
 
     def _check_expiration(self, cached_response: CachedResponse) -> bool:
         """Check if cached response has not expired"""
@@ -224,7 +230,8 @@ class CacheDecisionEngine:
         system_ok: bool,
         tenant_ok: bool,
         similarity: Optional[float],
-        cached_response: CachedResponse
+        cached_response: CachedResponse,
+        active_threshold: float
     ) -> tuple[CacheDecision, str]:
         """
         Make final cache decision based on all factors
@@ -237,6 +244,7 @@ class CacheDecisionEngine:
             tenant_ok: Tenant matches
             similarity: Similarity score
             cached_response: Cached response
+            active_threshold: The threshold value being used
 
         Returns:
             (decision, reason) tuple
@@ -274,7 +282,7 @@ class CacheDecisionEngine:
             return (
                 CacheDecision.THRESHOLD_NOT_MET,
                 f"Similarity {similarity or 0:.3f} "
-                f"< threshold {self.config.similarity_threshold}"
+                f"< threshold {active_threshold}"
             )
 
         # ALL checks passed -> CACHE HIT!

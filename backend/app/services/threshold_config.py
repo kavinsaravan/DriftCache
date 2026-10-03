@@ -13,13 +13,13 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def get_active_threshold(db: Session, tenant_id: Optional[str] = None) -> float:
+def get_active_threshold(db: Session, tenant_id: str = "default") -> float:
     """
     Get currently active similarity threshold
 
     Args:
         db: Database session
-        tenant_id: Optional tenant ID
+        tenant_id: Tenant ID (defaults to "default")
 
     Returns:
         Active threshold value (falls back to settings if no DB threshold)
@@ -46,7 +46,7 @@ def set_active_threshold(
     new_threshold: float,
     reason: str,
     created_by: str = "manual",
-    tenant_id: Optional[str] = None,
+    tenant_id: str = "default",
     metrics_before: Optional[dict] = None,
     metrics_after_estimate: Optional[dict] = None
 ) -> ThresholdVersion:

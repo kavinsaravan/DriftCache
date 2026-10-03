@@ -20,9 +20,9 @@ from app.database.session import get_db_manager
 from app.repositories.request_repo import RequestRepository
 from app.repositories.cache_repo import CacheRepository
 from app.repositories.provider_repo import ProviderRepository
-from app.repositories.threshold_repo import ThresholdRepository
 from app.embeddings.utils import create_prompt_hash
 from app.core.config import settings
+from app.services.threshold_config import get_active_threshold
 
 logger = logging.getLogger(__name__)
 
@@ -121,10 +121,16 @@ class CacheRecorder:
 
         try:
             with db_manager.session_scope() as session:
-                threshold_repo = ThresholdRepository(session)
-                current_threshold = threshold_repo.get_current()
+                # Use single source of truth for threshold (respects tenant_id)
+                threshold_used = get_active_threshold(session, tenant_id=tenant_id)
+
+                # Get threshold version ID for tracking
+                from app.models.threshold_version import ThresholdVersion
+                current_threshold = session.query(ThresholdVersion).filter(
+                    ThresholdVersion.is_active == True,
+                    ThresholdVersion.tenant_id == tenant_id
+                ).order_by(ThresholdVersion.active_from.desc()).first()
                 if current_threshold:
-                    threshold_used = current_threshold.threshold_value
                     threshold_version_id = current_threshold.id
 
                 # Get current index version

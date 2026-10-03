@@ -168,7 +168,8 @@ class CacheService:
             similarity=similarity,
             requested_model=model_name,
             requested_system_prompt=cache_key.system_prompt,
-            tenant_id=tenant_id
+            tenant_id=tenant_id,
+            threshold=threshold
         )
 
         # Calculate latency
