@@ -62,7 +62,10 @@ class SemanticSearchService:
         self,
         embedding: Embedding,
         response_text: str,
-        model_name: str
+        model_name: str,
+        tenant_id: str = "default",
+        system_prompt: Optional[str] = None,
+        conversation_history: Optional[str] = None
     ) -> int:
         """
         Add an embedding to the search index
@@ -71,6 +74,9 @@ class SemanticSearchService:
             embedding: Embedding to add
             response_text: The LLM response to cache
             model_name: Model that generated the response
+            tenant_id: Tenant namespace
+            system_prompt: System prompt used (if any)
+            conversation_history: Conversation context (for exact matching)
 
         Returns:
             Vector ID assigned by FAISS
@@ -90,6 +96,9 @@ class SemanticSearchService:
             response_text=response_text,
             model_name=model_name,
             embedding_model=self.embedding_service.model.model_name,
+            tenant_id=tenant_id,
+            system_prompt=system_prompt,
+            conversation_history=conversation_history,
             timestamp=embedding.metadata.timestamp,
             request_params=embedding.metadata.request_params,
             cache_hits=0
@@ -109,7 +118,9 @@ class SemanticSearchService:
         self,
         embeddings: List[Embedding],
         responses: List[str],
-        model_name: str
+        model_name: str,
+        tenant_id: str = "default",
+        system_prompt: Optional[str] = None
     ) -> List[int]:
         """
         Add multiple embeddings to index (more efficient)
@@ -118,6 +129,8 @@ class SemanticSearchService:
             embeddings: List of embeddings
             responses: List of corresponding responses
             model_name: Model name
+            tenant_id: Tenant namespace
+            system_prompt: System prompt used (if any)
 
         Returns:
             List of assigned vector IDs
@@ -141,6 +154,8 @@ class SemanticSearchService:
                 response_text=response,
                 model_name=model_name,
                 embedding_model=self.embedding_service.model.model_name,
+                tenant_id=tenant_id,
+                system_prompt=system_prompt,
                 timestamp=embedding.metadata.timestamp,
                 request_params=embedding.metadata.request_params,
                 cache_hits=0
@@ -230,54 +245,97 @@ class SemanticSearchService:
     def get_cache_entry(
         self,
         query_embedding: Embedding,
-        threshold: Optional[float] = None
+        threshold: Optional[float] = None,
+        model_name: Optional[str] = None,
+        tenant_id: Optional[str] = None,
+        system_prompt: Optional[str] = None,
+        conversation_history: Optional[str] = None,
+        require_same_model: bool = False
     ) -> Optional[CacheEntry]:
         """
         Get best cache match for a query
 
-        This is the main method used by the cache layer
+        This is the main method used by the cache layer.
+        Retrieves top-k candidates and filters for valid matches.
 
         Args:
             query_embedding: Query embedding
             threshold: Minimum similarity (defaults to settings)
+            model_name: Filter by model name
+            tenant_id: Filter by tenant
+            system_prompt: Filter by system prompt
+            require_same_model: Whether to require exact model match
 
         Returns:
             CacheEntry if match found, None otherwise
         """
         threshold = threshold or settings.SIMILARITY_THRESHOLD
 
-        # Search for matches
-        results = self.search(query_embedding, top_k=1, threshold=threshold)
+        # Search for top candidates (not just top-1)
+        # This allows filtering and picking the best valid match
+        results = self.search(query_embedding, top_k=10, threshold=threshold)
 
-        # Check if we have a match
-        best_match = results.get_best_match()
-        if best_match is None:
-            logger.info("No cache match found")
+        # Filter candidates for valid matches
+        valid_candidates = []
+        for result in results.results:
+            metadata = self.metadata_store.get(result.vector_id)
+            if metadata is None:
+                continue
+
+            # Filter by tenant
+            if tenant_id and metadata.tenant_id != tenant_id:
+                continue
+
+            # Filter by model
+            if model_name and require_same_model:
+                if metadata.model_name != model_name:
+                    continue
+
+            # Filter by system prompt (must match exactly)
+            if system_prompt is not None or metadata.system_prompt is not None:
+                if system_prompt != metadata.system_prompt:
+                    continue
+
+            # Filter by conversation history (must match exactly for multi-turn)
+            if conversation_history is not None or metadata.conversation_history is not None:
+                if conversation_history != metadata.conversation_history:
+                    continue
+
+            # Check TTL expiration
+            if metadata.timestamp:
+                from datetime import datetime, timedelta
+                ttl_seconds = settings.CACHE_TTL_SECONDS
+                expiration = metadata.timestamp + timedelta(seconds=ttl_seconds)
+                if datetime.utcnow() > expiration:
+                    continue
+
+            valid_candidates.append((result, metadata))
+
+        if not valid_candidates:
+            logger.info("No valid cache match found after filtering")
             return None
 
-        # Get metadata
-        metadata = self.metadata_store.get(best_match.vector_id)
-        if metadata is None:
-            logger.error(f"Missing metadata for vector_id={best_match.vector_id}")
-            return None
+        # Get the best valid candidate (highest similarity)
+        best_result, best_metadata = valid_candidates[0]
 
         # Increment cache hit counter
-        self.metadata_store.increment_cache_hit(best_match.vector_id)
+        self.metadata_store.increment_cache_hit(best_result.vector_id)
 
         # Create cache entry
         cache_entry = CacheEntry(
-            vector_id=best_match.vector_id,
-            prompt_id=best_match.prompt_id,
-            prompt_text=best_match.prompt_text,
-            response_text=best_match.response_text or "",
-            similarity=best_match.similarity,
-            metadata=metadata,
+            vector_id=best_result.vector_id,
+            prompt_id=best_result.prompt_id,
+            prompt_text=best_result.prompt_text,
+            response_text=best_result.response_text or "",
+            similarity=best_result.similarity,
+            metadata=best_metadata,
             is_cache_hit=True
         )
 
         logger.info(
-            f"Cache HIT: similarity={best_match.similarity:.3f}, "
-            f"vector_id={best_match.vector_id}"
+            f"Cache HIT: similarity={best_result.similarity:.3f}, "
+            f"vector_id={best_result.vector_id} "
+            f"(filtered {len(results.results) - len(valid_candidates)} invalid candidates)"
         )
 
         return cache_entry

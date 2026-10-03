@@ -27,6 +27,8 @@ from app.models.cache_schemas import (
 )
 from app.models.schemas import Message
 from app.core.config import settings
+from app.database.session import SessionLocal
+from app.services.threshold_config import get_active_threshold
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +109,18 @@ class CacheService:
         # Extract cache key
         cache_key = self._extract_cache_key(messages, model_name, tenant_id)
 
+        # Get active threshold from DB if no config provided
+        threshold = None
+        if config:
+            threshold = config.similarity_threshold
+        else:
+            # Get from database
+            db = SessionLocal()
+            try:
+                threshold = get_active_threshold(db, tenant_id=tenant_id)
+            finally:
+                db.close()
+
         # Generate embedding
         embedding_text = cache_key.to_embedding_text(
             include_system=config.include_system_prompt if config else True
@@ -118,9 +132,15 @@ class CacheService:
         )
 
         # Search for similar cached responses in FAISS
+        # Pass filter parameters to retrieve top-k and filter for valid matches
         cache_entry = self.search_service.get_cache_entry(
             query_embedding=embedding,
-            threshold=config.similarity_threshold if config else None
+            threshold=threshold,
+            model_name=model_name,
+            tenant_id=tenant_id,
+            system_prompt=cache_key.system_prompt,
+            conversation_history=cache_key.conversation_history,
+            require_same_model=config.require_same_model if config else False
         )
 
         # Get cached response from Redis if found
@@ -131,17 +151,20 @@ class CacheService:
         if cache_entry:
             similarity = cache_entry.similarity
 
+            # Generate the same cache key hash used during storage
+            cache_key_hash = cache_key.to_cache_key_hash()
+
             # Try Redis first (online serving layer)
             cached_response = await self.redis_store.get_cached_response(
-                cache_entry.prompt_id
+                cache_key_hash
             )
             retrieval_source = "redis"
 
             # Fallback to legacy store if not in Redis
             if not cached_response:
-                cached_response = self.cache_store.get(cache_entry.prompt_id)
+                cached_response = self.cache_store.get(cache_key_hash)
                 retrieval_source = "legacy"
-                logger.debug(f"Redis miss, using legacy store for {cache_entry.prompt_id[:8]}...")
+                logger.debug(f"Redis miss, using legacy store for {cache_key_hash[:8]}...")
 
         # Make decision
         decision_result = self.decision_engine.evaluate(
@@ -149,7 +172,8 @@ class CacheService:
             similarity=similarity,
             requested_model=model_name,
             requested_system_prompt=cache_key.system_prompt,
-            tenant_id=tenant_id
+            tenant_id=tenant_id,
+            threshold=threshold
         )
 
         # Calculate latency
@@ -247,10 +271,11 @@ class CacheService:
         )
 
         # Store in Redis (online serving layer)
-        # IMPORTANT: Use prompt_hash as the key, not cache_id, so FAISS can find it
-        prompt_hash = embedding.metadata.prompt_hash
+        # IMPORTANT: Use cache_key hash that includes tenant, model, system, history, and prompt
+        # This prevents key collisions when different conversations end with the same question
+        cache_key_hash = cache_key.to_cache_key_hash()
         await self.redis_store.set_cached_response(
-            cache_id=prompt_hash,  # Use prompt_hash as key for FAISS lookup
+            cache_id=cache_key_hash,
             response=cached_response,
             ttl_seconds=ttl
         )
@@ -262,7 +287,10 @@ class CacheService:
         self.search_service.add_to_index(
             embedding=embedding,
             response_text=response_text,
-            model_name=model_name
+            model_name=model_name,
+            tenant_id=tenant_id,
+            system_prompt=cache_key.system_prompt,
+            conversation_history=cache_key.conversation_history
         )
 
         # Persist FAISS index to disk so it survives restarts
@@ -284,6 +312,9 @@ class CacheService:
         """
         Extract cache key from messages
 
+        Includes conversation history (assistant messages) for proper
+        multi-turn conversation matching.
+
         Args:
             messages: Chat messages
             model_name: Model name
@@ -294,20 +325,46 @@ class CacheService:
         """
         # Extract system prompt
         system_prompt = None
-        user_messages = []
-
         for msg in messages:
             if msg.role == "system":
                 system_prompt = msg.content
-            elif msg.role == "user":
-                user_messages.append(msg.content)
+                break  # Only one system message expected
 
-        # Combine user messages
-        prompt_text = " ".join(user_messages)
+        # Find the last user message (the current query)
+        last_user_idx = None
+        for i in range(len(messages) - 1, -1, -1):
+            if messages[i].role == "user":
+                last_user_idx = i
+                break
+
+        if last_user_idx is None:
+            # No user message found, shouldn't happen but handle gracefully
+            return CacheKey(
+                prompt_text="",
+                system_prompt=system_prompt,
+                conversation_history=None,
+                model_name=model_name,
+                tenant_id=tenant_id
+            )
+
+        # The last user message is the query
+        prompt_text = messages[last_user_idx].content
+
+        # Build conversation history from all messages BEFORE the last user message
+        conversation_parts = []
+        for i, msg in enumerate(messages[:last_user_idx]):
+            if msg.role == "user":
+                conversation_parts.append(f"[USER] {msg.content}")
+            elif msg.role == "assistant":
+                conversation_parts.append(f"[ASSISTANT] {msg.content}")
+            # Skip system messages (already extracted separately)
+
+        conversation_history = " ".join(conversation_parts) if conversation_parts else None
 
         return CacheKey(
             prompt_text=prompt_text,
             system_prompt=system_prompt,
+            conversation_history=conversation_history,
             model_name=model_name,
             tenant_id=tenant_id
         )

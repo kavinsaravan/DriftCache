@@ -155,7 +155,7 @@ DriftCache/
 │  │  Fine-Tuning Pipeline               │   │
 │  │  - Training Data Collection         │   │
 │  │  - PyTorch Contrastive Learning     │   │
-│  │  - Model Evaluation & A/B Testing   │   │
+│  │  - Model Evaluation & Versioning    │   │
 │  └─────────────────────────────────────┘   │
 │                                            │
 │  ┌─────────────────────────────────────┐   │
@@ -196,7 +196,6 @@ DriftCache/
 - **Contrastive Learning**: PyTorch training with Multiple Negatives Ranking Loss
 - **Model Evaluation**: Precision@K, Recall@K, MRR, NDCG metrics
 - **Model Versioning**: Hugging Face Hub integration for model registry
-- **A/B Testing**: Gradual model rollout with traffic splitting
 
 ### 4. Optimization & Drift Detection
 - **Statistical Drift Detection**: KS-test, Wasserstein distance on similarity distributions
@@ -224,7 +223,10 @@ DriftCache/
 git clone <repository-url>
 cd DriftCache
 cp .env.example .env
-# Add your OPENAI_API_KEY to .env
+# Configure environment variables in .env:
+# - API_KEY: Main API key for chat/completions (required)
+# - METRICS_API_KEY: Read-only key for dashboard (optional, recommended)
+# - OPENAI_API_KEY or ANTHROPIC_API_KEY: For LLM provider
 
 # Start with Docker (recommended)
 docker compose up --build
@@ -232,6 +234,12 @@ docker compose up --build
 # Open dashboard
 open http://localhost
 ```
+
+**Security Note:** The dashboard uses `METRICS_API_KEY` (read-only) instead of the main `API_KEY`. This prevents write operations but still exposes:
+- Cached prompts via `/metrics/top-cached-prompts`
+- Performance data for any `tenant_id`
+
+For single-user demos, embedding `METRICS_API_KEY` in the frontend is acceptable. For production multi-tenant deployments, implement server-side rendering or a backend proxy to keep all keys secure. Set both keys in your backend `.env` file.
 
 ## Integration Guide
 
@@ -247,7 +255,7 @@ from openai import OpenAI
 # Just point to DriftCache instead of OpenAI
 client = OpenAI(
     base_url="https://driftcache-api-production.up.railway.app/api/v1",
-    api_key="dummy"  # Not required, but SDK expects it
+    api_key="your-api-key-here"  # Set API_KEY in backend .env
 )
 
 response = client.chat.completions.create(
@@ -305,7 +313,7 @@ from langchain_openai import ChatOpenAI
 llm = ChatOpenAI(
     base_url="https://driftcache-api-production.up.railway.app/api/v1",
     model="claude-sonnet-5",
-    api_key="dummy"
+    api_key="your-api-key-here"
 )
 
 response = llm.invoke("Explain semantic caching")
@@ -320,7 +328,7 @@ from llama_index.llms.openai import OpenAI
 llm = OpenAI(
     api_base="https://driftcache-api-production.up.railway.app/api/v1",
     model="claude-sonnet-5",
-    api_key="dummy"
+    api_key="your-api-key-here"
 )
 
 response = llm.complete("What is vector search?")
@@ -411,15 +419,7 @@ POST /api/v1/training/jobs
 - Normalized Discounted Cumulative Gain (NDCG)
 - Latency benchmarking
 
-**4. A/B Testing & Deployment**
-```bash
-POST /api/v1/training/models/{version_id}/deploy
-```
-- Deploy new models with traffic percentage (10% → 50% → 100%)
-- Compare performance against baseline
-- Safe rollback if regression detected
-
-**5. Hugging Face Integration**
+**4. Hugging Face Integration**
 - Upload models to Hugging Face Hub
 - Model versioning and registry
 - Easy sharing and collaboration

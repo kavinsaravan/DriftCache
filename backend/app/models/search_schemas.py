@@ -74,6 +74,9 @@ class VectorMetadata(BaseModel):
     response_text: Optional[str] = Field(None, description="Cached response")
     model_name: str = Field(..., description="Model used for generation")
     embedding_model: str = Field(..., description="Embedding model used")
+    tenant_id: str = Field(default="default", description="Tenant namespace")
+    system_prompt: Optional[str] = Field(None, description="System prompt used")
+    conversation_history: Optional[str] = Field(None, description="Conversation context")
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     request_params: Dict[str, Any] = Field(default_factory=dict)
     cache_hits: int = Field(default=0, description="Number of times this was reused")
@@ -88,6 +91,9 @@ class VectorMetadata(BaseModel):
             "response_text": self.response_text,
             "model_name": self.model_name,
             "embedding_model": self.embedding_model,
+            "tenant_id": self.tenant_id,
+            "system_prompt": self.system_prompt,
+            "conversation_history": self.conversation_history,
             "timestamp": self.timestamp.isoformat(),
             "request_params": self.request_params,
             "cache_hits": self.cache_hits,
@@ -102,6 +108,12 @@ class VectorMetadata(BaseModel):
             data["timestamp"] = datetime.fromisoformat(data["timestamp"])
         if data.get("last_accessed") and isinstance(data["last_accessed"], str):
             data["last_accessed"] = datetime.fromisoformat(data["last_accessed"])
+
+        # Provide defaults for new fields (for backward compatibility with old cache)
+        data.setdefault("tenant_id", "default")
+        data.setdefault("system_prompt", None)
+        data.setdefault("conversation_history", None)
+
         return cls(**data)
 
 

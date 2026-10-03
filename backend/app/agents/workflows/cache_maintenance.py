@@ -271,7 +271,7 @@ class CacheMaintenanceWorkflow:
                 result = self.update_threshold_tool._run(
                     new_threshold=state.new_threshold,
                     reason=state.decision_reason,
-                    dry_run=True,  # Week 6: Simulation mode
+                    dry_run=True,  #  Simulation mode
                     tenant_id=state.tenant_id
                 )
 
@@ -285,7 +285,7 @@ class CacheMaintenanceWorkflow:
                 result = self.update_threshold_tool._run(
                     new_threshold=state.new_threshold,
                     reason=state.decision_reason,
-                    dry_run=True,  # Week 6: Simulation mode
+                    dry_run=True,  #  Simulation mode
                     tenant_id=state.tenant_id
                 )
 
@@ -296,7 +296,7 @@ class CacheMaintenanceWorkflow:
                 result = self.index_rebuild_tool._run(
                     reason=state.decision_reason,
                     priority="normal",
-                    dry_run=True,  # Week 6: Simulation mode
+                    dry_run=True,  #  Simulation mode
                     tenant_id=state.tenant_id
                 )
 
@@ -315,7 +315,7 @@ class CacheMaintenanceWorkflow:
         """
         Node 6: Validate Result
 
-        Checks if action improved metrics (simulation for Week 6)
+        Checks if action improved metrics (uses estimated improvements)
         """
         logger.info(f"[{state.workflow_id}] Validating result")
         state.workflow_status = WorkflowStatus.VALIDATING
@@ -327,7 +327,7 @@ class CacheMaintenanceWorkflow:
                 state.validation_result = {"status": "skipped"}
 
             elif state.action_result and state.action_result.get("status") == "simulated":
-                # Week 6: Use simulation estimates
+                #  Use simulation estimates
                 estimated_impact = state.action_result.get("estimated_impact", {})
 
                 state.validation_passed = True  # Simulation always "passes"

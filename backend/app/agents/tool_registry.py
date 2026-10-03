@@ -35,7 +35,7 @@ class ToolRegistry:
         - Threshold management (2 tools)
         - Index operations (2 tools)
 
-        Total: 10 tools for Week 6
+        Total: 10 tools for system observability
         """
         tools = []
 

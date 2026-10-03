@@ -157,16 +157,18 @@ class ThresholdOptimizerAgent:
             Threshold version ID
         """
         with get_db_manager().session_scope() as session:
-            # Deactivate previous threshold
-            previous_versions = session.query(ThresholdVersion).filter(
-                ThresholdVersion.is_active == True,
-                ThresholdVersion.tenant_id == tenant_id
-            ).all()
-
             now = datetime.utcnow()
-            for prev in previous_versions:
-                prev.is_active = False
-                prev.active_until = now
+
+            # Only deactivate previous threshold if this is a deployment (not simulation)
+            if optimization_result["decision"] == "deploy":
+                previous_versions = session.query(ThresholdVersion).filter(
+                    ThresholdVersion.is_active == True,
+                    ThresholdVersion.tenant_id == tenant_id
+                ).all()
+
+                for prev in previous_versions:
+                    prev.is_active = False
+                    prev.active_until = now
 
             # Create new threshold version
             new_version = ThresholdVersion(
@@ -185,7 +187,7 @@ class ThresholdOptimizerAgent:
                 false_miss_rate_after_estimate=optimization_result.get("after_estimate", {}).get("false_miss_rate"),
                 active_from=now,
                 active_until=None,  # Currently active
-                is_active=True,
+                is_active=(optimization_result["decision"] == "deploy"),
                 deployed_at=now if optimization_result["decision"] == "deploy" else None,
                 tenant_id=tenant_id
             )

@@ -192,6 +192,7 @@ class CacheKey(BaseModel):
     """
     prompt_text: str
     system_prompt: Optional[str] = None
+    conversation_history: Optional[str] = None  # Assistant context for multi-turn
     model_name: Optional[str] = None  # Optional for flexible matching
     tenant_id: str = "default"
 
@@ -199,24 +200,57 @@ class CacheKey(BaseModel):
         """
         Convert to text for embedding generation
 
+        IMPORTANT: Only embeds the current user message to avoid truncation.
+        System prompt and conversation history are matched exactly via hashes.
+
         Args:
-            include_system: Whether to include system prompt
+            include_system: Ignored (kept for backward compatibility)
 
         Returns:
-            Combined text for embedding
+            Just the current user message (prompt_text)
         """
-        parts = [self.prompt_text]
+        # Only embed the current question to avoid truncation at 256 tokens
+        # System prompt and history are matched via exact hash comparison
+        return self.prompt_text
 
-        if include_system and self.system_prompt:
-            parts.insert(0, f"[SYSTEM] {self.system_prompt}")
+    def to_cache_key_hash(self) -> str:
+        """
+        Generate a unique hash for Redis cache key
 
-        return " ".join(parts)
+        Includes all fields that must match exactly:
+        - tenant_id
+        - model_name
+        - system_prompt
+        - conversation_history
+        - prompt_text
+
+        This prevents key collisions when different conversations
+        end with the same question.
+
+        Returns:
+            SHA256 hash of all key components
+        """
+        import hashlib
+
+        # Build a canonical string representation
+        components = [
+            f"tenant:{self.tenant_id}",
+            f"model:{self.model_name or ''}",
+            f"system:{self.system_prompt or ''}",
+            f"history:{self.conversation_history or ''}",
+            f"prompt:{self.prompt_text}"
+        ]
+        canonical = "|".join(components)
+
+        # Hash to fixed-length identifier
+        return hashlib.sha256(canonical.encode('utf-8')).hexdigest()
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
         return {
             "prompt_text": self.prompt_text,
             "system_prompt": self.system_prompt,
+            "conversation_history": self.conversation_history,
             "model_name": self.model_name,
             "tenant_id": self.tenant_id
         }
