@@ -151,20 +151,49 @@ class CacheService:
         if cache_entry:
             similarity = cache_entry.similarity
 
-            # Generate the same cache key hash used during storage
-            cache_key_hash = cache_key.to_cache_key_hash()
+            # Use the cache key hash from the matched entry's metadata
+            # This is critical: FAISS does semantic matching, then we use the
+            # matched entry's stored hash to look up the exact response
+            stored_cache_key_hash = cache_entry.metadata.cache_key_hash
 
-            # Try Redis first (online serving layer)
-            cached_response = await self.redis_store.get_cached_response(
-                cache_key_hash
-            )
-            retrieval_source = "redis"
+            if stored_cache_key_hash:
+                # Try Redis first (online serving layer)
+                cached_response = await self.redis_store.get_cached_response(
+                    stored_cache_key_hash
+                )
+                retrieval_source = "redis"
 
-            # Fallback to legacy store if not in Redis
-            if not cached_response:
-                cached_response = self.cache_store.get(cache_key_hash)
-                retrieval_source = "legacy"
-                logger.debug(f"Redis miss, using legacy store for {cache_key_hash[:8]}...")
+                # Fallback to response_text from metadata if not in Redis
+                if not cached_response:
+                    # The response is already in the metadata, use it directly
+                    cached_response = CachedResponse(
+                        cache_id=cache_entry.prompt_id,
+                        prompt_text=cache_entry.prompt_text,
+                        response_text=cache_entry.response_text,
+                        model_name=cache_entry.metadata.model_name,
+                        embedding_vector=[],  # Not needed for serving
+                        created_at=cache_entry.metadata.timestamp,
+                        expires_at=cache_entry.metadata.timestamp + timedelta(seconds=settings.CACHE_TTL_SECONDS),
+                        tenant_id=cache_entry.metadata.tenant_id,
+                        system_prompt=cache_entry.metadata.system_prompt
+                    )
+                    retrieval_source = "metadata"
+                    logger.debug(f"Redis miss, using metadata for {stored_cache_key_hash[:8]}...")
+            else:
+                # Old entry without cache_key_hash, fall back to metadata
+                cached_response = CachedResponse(
+                    cache_id=cache_entry.prompt_id,
+                    prompt_text=cache_entry.prompt_text,
+                    response_text=cache_entry.response_text,
+                    model_name=cache_entry.metadata.model_name,
+                    embedding_vector=[],
+                    created_at=cache_entry.metadata.timestamp,
+                    expires_at=cache_entry.metadata.timestamp + timedelta(seconds=settings.CACHE_TTL_SECONDS),
+                    tenant_id=cache_entry.metadata.tenant_id,
+                    system_prompt=cache_entry.metadata.system_prompt
+                )
+                retrieval_source = "metadata_legacy"
+                logger.debug("Using metadata for entry without cache_key_hash")
 
         # Make decision
         decision_result = self.decision_engine.evaluate(
@@ -290,7 +319,8 @@ class CacheService:
             model_name=model_name,
             tenant_id=tenant_id,
             system_prompt=cache_key.system_prompt,
-            conversation_history=cache_key.conversation_history
+            conversation_history=cache_key.conversation_history,
+            cache_key_hash=cache_key_hash
         )
 
         # Persist FAISS index to disk so it survives restarts

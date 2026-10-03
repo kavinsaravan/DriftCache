@@ -65,7 +65,8 @@ class SemanticSearchService:
         model_name: str,
         tenant_id: str = "default",
         system_prompt: Optional[str] = None,
-        conversation_history: Optional[str] = None
+        conversation_history: Optional[str] = None,
+        cache_key_hash: Optional[str] = None
     ) -> int:
         """
         Add an embedding to the search index
@@ -77,6 +78,7 @@ class SemanticSearchService:
             tenant_id: Tenant namespace
             system_prompt: System prompt used (if any)
             conversation_history: Conversation context (for exact matching)
+            cache_key_hash: Redis cache key hash (for retrieval)
 
         Returns:
             Vector ID assigned by FAISS
@@ -99,6 +101,7 @@ class SemanticSearchService:
             tenant_id=tenant_id,
             system_prompt=system_prompt,
             conversation_history=conversation_history,
+            cache_key_hash=cache_key_hash,
             timestamp=embedding.metadata.timestamp,
             request_params=embedding.metadata.request_params,
             cache_hits=0
