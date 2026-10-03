@@ -282,7 +282,9 @@ class CacheService:
         self.search_service.add_to_index(
             embedding=embedding,
             response_text=response_text,
-            model_name=model_name
+            model_name=model_name,
+            tenant_id=tenant_id,
+            system_prompt=cache_key.system_prompt
         )
 
         # Persist FAISS index to disk so it survives restarts

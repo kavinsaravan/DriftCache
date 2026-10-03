@@ -74,6 +74,8 @@ class VectorMetadata(BaseModel):
     response_text: Optional[str] = Field(None, description="Cached response")
     model_name: str = Field(..., description="Model used for generation")
     embedding_model: str = Field(..., description="Embedding model used")
+    tenant_id: str = Field(default="default", description="Tenant namespace")
+    system_prompt: Optional[str] = Field(None, description="System prompt used")
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     request_params: Dict[str, Any] = Field(default_factory=dict)
     cache_hits: int = Field(default=0, description="Number of times this was reused")
@@ -88,6 +90,8 @@ class VectorMetadata(BaseModel):
             "response_text": self.response_text,
             "model_name": self.model_name,
             "embedding_model": self.embedding_model,
+            "tenant_id": self.tenant_id,
+            "system_prompt": self.system_prompt,
             "timestamp": self.timestamp.isoformat(),
             "request_params": self.request_params,
             "cache_hits": self.cache_hits,

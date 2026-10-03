@@ -62,7 +62,9 @@ class SemanticSearchService:
         self,
         embedding: Embedding,
         response_text: str,
-        model_name: str
+        model_name: str,
+        tenant_id: str = "default",
+        system_prompt: Optional[str] = None
     ) -> int:
         """
         Add an embedding to the search index
@@ -71,6 +73,8 @@ class SemanticSearchService:
             embedding: Embedding to add
             response_text: The LLM response to cache
             model_name: Model that generated the response
+            tenant_id: Tenant namespace
+            system_prompt: System prompt used (if any)
 
         Returns:
             Vector ID assigned by FAISS
@@ -90,6 +94,8 @@ class SemanticSearchService:
             response_text=response_text,
             model_name=model_name,
             embedding_model=self.embedding_service.model.model_name,
+            tenant_id=tenant_id,
+            system_prompt=system_prompt,
             timestamp=embedding.metadata.timestamp,
             request_params=embedding.metadata.request_params,
             cache_hits=0
@@ -109,7 +115,9 @@ class SemanticSearchService:
         self,
         embeddings: List[Embedding],
         responses: List[str],
-        model_name: str
+        model_name: str,
+        tenant_id: str = "default",
+        system_prompt: Optional[str] = None
     ) -> List[int]:
         """
         Add multiple embeddings to index (more efficient)
@@ -118,6 +126,8 @@ class SemanticSearchService:
             embeddings: List of embeddings
             responses: List of corresponding responses
             model_name: Model name
+            tenant_id: Tenant namespace
+            system_prompt: System prompt used (if any)
 
         Returns:
             List of assigned vector IDs
@@ -141,6 +151,8 @@ class SemanticSearchService:
                 response_text=response,
                 model_name=model_name,
                 embedding_model=self.embedding_service.model.model_name,
+                tenant_id=tenant_id,
+                system_prompt=system_prompt,
                 timestamp=embedding.metadata.timestamp,
                 request_params=embedding.metadata.request_params,
                 cache_hits=0

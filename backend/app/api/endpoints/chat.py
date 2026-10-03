@@ -130,7 +130,7 @@ async def create_chat_completion(
                         messages=request.messages,
                         response_text=response.content,
                         model_name=request.model,
-                        provider="openai",
+                        provider=provider_router.get_provider_for_model(request.model),
                         input_tokens=None,  # Not available in streaming mode
                         output_tokens=None,
                         estimated_cost=None
@@ -235,7 +235,7 @@ async def create_chat_completion(
                     messages=request.messages,
                     response_text=response_text,
                     model_name=request.model,
-                    provider="openai",
+                    provider=provider_router.get_provider_for_model(request.model),
                     input_tokens=response.usage.prompt_tokens if response.usage else None,
                     output_tokens=response.usage.completion_tokens if response.usage else None,
                     estimated_cost=None  # Cost calculation based on token usage
