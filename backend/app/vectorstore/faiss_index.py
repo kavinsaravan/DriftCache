@@ -276,6 +276,8 @@ class FAISSIndex:
         """
         Convert L2 distance to cosine similarity
 
+        IMPORTANT: FAISS IndexFlatL2 returns SQUARED L2 distance.
+
         For normalized vectors:
         L2_distance² = 2 * (1 - cosine_similarity)
 
@@ -283,16 +285,16 @@ class FAISSIndex:
         cosine_similarity = 1 - (L2_distance² / 2)
 
         Args:
-            distance: L2 distance
+            distance: Squared L2 distance from FAISS (already squared!)
 
         Returns:
             Cosine similarity [0, 1]
         """
-        # Clamp distance to valid range
-        distance = max(0.0, distance)
+        # Clamp distance to valid range [0, 2] for normalized vectors
+        distance = max(0.0, min(2.0, distance))
 
-        # Convert to similarity
-        similarity = 1.0 - (distance ** 2 / 2.0)
+        # Convert to similarity (distance is already squared by FAISS)
+        similarity = 1.0 - (distance / 2.0)
 
         # Clamp to [0, 1]
         return max(0.0, min(1.0, similarity))

@@ -1,30 +1,30 @@
 # DriftCache
 
-**Adaptive Semantic Caching & Autonomous Optimization Platform for LLM Systems**
+**Semantic Caching Platform for LLM Systems**
 
-DriftCache is a semantic caching layer that sits between applications and LLM providers, using embeddings and FAISS vector search to identify semantically similar queries and reuse responses, with autonomous agents to detect semantic drift over time and optimize cache performance.
+DriftCache is an OpenAI-compatible API proxy that caches semantically similar LLM responses using sentence transformers and FAISS vector search. It reduces repeated API calls by recognizing paraphrased queries, while monitoring cache quality and semantic drift over time.
 
 ## Key Features
 
-- **Semantic Caching** - OpenAI embeddings + FAISS vector search to recognize paraphrased queries
-- **Fine-Tuning Pipeline** - PyTorch & Hugging Face integration to fine-tune embeddings on domain-specific data
-- **Autonomous Optimization** - LangGraph agents detect drift and auto-tune similarity thresholds
-- **Self-Healing Infrastructure** - Automatic index rebuilds when degradation is detected
-- **A/B Testing Framework** - Safe model deployment with gradual traffic rollout
-- **OpenAI-Compatible API** - Drop-in replacement for existing integrations
+- **Semantic Caching** - Sentence Transformers + FAISS to recognize paraphrased queries beyond exact matches
+- **OpenAI-Compatible Proxy** - Drop-in replacement for existing `/v1/chat/completions` integrations
+- **Dual Storage Architecture** - Redis for fast retrieval + PostgreSQL for analytics and persistence
+- **Drift Detection** - Statistical monitoring (KS-test, Wasserstein distance) to detect query distribution changes
+- **Fine-Tuning Pipeline** - PyTorch-based contrastive learning to adapt embeddings to domain-specific queries
+- **Threshold Optimization** - Automated search over candidate similarity thresholds with multi-objective scoring
 
 ## Technology Stack
 
 | Component | Technology |
 |-----------|------------|
 | Backend | FastAPI, Python 3.11, Pydantic |
-| Frontend | React, Recharts, Nginx |
+| Frontend | React, TypeScript, Recharts, TailwindCSS |
 | Caching | Redis 7, PostgreSQL 15 |
-| Vector Search | FAISS, sentence-transformers |
-| ML Training | PyTorch 2.2, Hugging Face Transformers |
-| LLM | OpenAI GPT-4/4o-mini, Anthropic Claude |
-| AI Agents | LangChain 0.3+, LangGraph |
-| Infrastructure | Docker, Alembic |
+| Vector Search | FAISS, sentence-transformers (all-MiniLM-L6-v2) |
+| ML Training | PyTorch 2.2, Sentence Transformers, Hugging Face |
+| Drift Detection | SciPy (KS-test, Wasserstein), NumPy |
+| LLM Providers | OpenAI GPT-4/4o-mini, Anthropic Claude |
+| Infrastructure | Docker, Alembic, SQLAlchemy |
 
 ## Project Structure
 
@@ -33,17 +33,18 @@ DriftCache/
 ├── backend/
 │   ├── app/
 │   │   ├── api/
-│   │   │   ├── endpoints/           
-│   │   │   │   ├── chat.py         
-│   │   │   │   ├── metrics.py      
-│   │   │   │   ├── training.py     
-│   │   │   │   ├── supervisor.py   
-│   │   │   │   ├── drift.py        
-│   │   │   │   ├── evaluation.py   
-│   │   │   │   ├── vectorstore.py  
-│   │   │   │   └── models.py       
-│   │   │   └── routes.py           
-│   │   ├── agents/                  
+<<<<<<< HEAD
+│   │   │   ├── endpoints/           # API route handlers
+│   │   │   │   ├── chat.py         # Chat completions (OpenAI-compatible)
+│   │   │   │   ├── metrics.py      # Cache metrics & analytics
+│   │   │   │   ├── training.py     # Fine-tuning pipeline
+│   │   │   │   ├── supervisor.py   # Optimization orchestration
+│   │   │   │   ├── drift.py        # Drift detection
+│   │   │   │   ├── evaluation.py   # Cache quality evaluation
+│   │   │   │   ├── vectorstore.py  # FAISS index management
+│   │   │   │   └── models.py       # Model listing
+│   │   │   └── routes.py           # Route registration
+│   │   ├── agents/                  # Automated optimization agents
 │   │   │   ├── threshold_optimizer.py
 │   │   │   ├── index_rebuilder.py
 │   │   │   └── supervisor.py
@@ -158,10 +159,10 @@ DriftCache/
 │  └─────────────────────────────────────┘   │
 │                                            │
 │  ┌─────────────────────────────────────┐   │
-│  │  Autonomous Optimization            │   │
-│  │  - Drift Detection                  │   │
-│  │  - Self-Repair Agents               │   │
-│  │  - Performance Monitoring           │   │
+│  │  Optimization & Monitoring          │   │
+│  │  - Drift Detection (SciPy stats)    │   │
+│  │  - Threshold Optimization           │   │
+│  │  - Performance Analytics            │   │
 │  └─────────────────────────────────────┘   │
 └─────────────────────────────────────────────┘
        │                    │
@@ -197,10 +198,10 @@ DriftCache/
 - **Model Versioning**: Hugging Face Hub integration for model registry
 - **A/B Testing**: Gradual model rollout with traffic splitting
 
-### 4. Autonomous Optimization (LangGraph Agents)
-- **Drift Detection Agent**: Monitors cache quality degradation
-- **Optimization Agent**: Automatically adjusts similarity thresholds
-- **Repair Agent**: Self-heals cache inconsistencies
+### 4. Optimization & Drift Detection
+- **Statistical Drift Detection**: KS-test, Wasserstein distance on similarity distributions
+- **Threshold Optimization**: Grid search with multi-objective scoring (precision/recall/cost/latency)
+- **Remediation Policies**: Rule-based recommendations for threshold adjustments and index rebuilds
 
 ### 5. Data Persistence
 - **PostgreSQL**: Stores metadata, analytics, and configuration
@@ -339,15 +340,26 @@ print(response.text)
 - **OpenAI Compatible**: Works with any tool/framework that supports OpenAI API
 
 
-## Performance Metrics
+## How It Works
 
-Based on 1,000-request benchmark:
+```
+Request → Embed prompt → FAISS search → Similarity ≥ threshold?
+                                              ↓
+                                    Yes: Return from Redis/cache
+                                    No:  Call LLM → Store response
+```
 
-- **68% cache hit rate** - Reduced LLM calls by over two-thirds
-- **15ms p95 cache latency** - 144x faster than provider calls (1,850ms p95)
-- **$11.72 estimated savings** - Per 1,000 requests (102,000 tokens saved)
-- **94% precision, 76% recall** - High quality semantic matching
-- **45 requests/second** - Production-ready throughput
+**Core Flow:**
+1. Incoming request is embedded using Sentence Transformers (384-dim vectors)
+2. FAISS performs k-NN search against cached prompt embeddings
+3. If similarity score ≥ threshold (default 0.85), retrieve from Redis
+4. Otherwise, forward to LLM provider and cache the response
+5. All decisions logged to PostgreSQL for drift detection and optimization
+
+**Optimization Pipeline:**
+- Drift detector monitors similarity score distributions using KS-test and Wasserstein distance
+- Threshold optimizer evaluates candidate thresholds using multi-objective scoring (precision/recall/cost)
+- Fine-tuning trainer uses contrastive learning on cached query pairs to improve domain-specific matching
 
 ## API Endpoints
 
@@ -366,17 +378,13 @@ POST /models/{version_id}/deploy   # Deploy model with A/B testing
 GET  /training/stats               # Training statistics
 ```
 
-**Autonomous Agents:**
+**Optimization & Monitoring:**
 ```bash
-POST /supervisor/run               # Trigger autonomous optimization
-GET  /supervisor/latest            # Most recent workflow
-GET  /benchmark/summary            # Latest benchmark results
-```
-
-**Metrics & Drift:**
-```bash
-GET  /metrics/cache-performance    # Hit rate, latency
-GET  /drift/status                 # Current drift score
+POST /supervisor/run               # Run threshold optimization workflow
+GET  /supervisor/latest            # Latest optimization results
+GET  /metrics/cache-performance    # Hit rate, latency, cost savings
+GET  /drift/status                 # Current drift severity and statistics
+GET  /benchmark/summary            # Benchmark results
 ```
 
 ## Fine-Tuning Pipeline
@@ -423,17 +431,24 @@ POST /api/v1/training/models/{version_id}/deploy
 
 See [FINE_TUNING_IMPLEMENTATION.md](FINE_TUNING_IMPLEMENTATION.md) for detailed documentation.
 
-## Autonomous Agent System
+## Optimization System
 
-**3-Layer Architecture:**
+**Policy-Driven Remediation:**
 
-1. **Tool Layer** - 10 LangChain tools (drift detection, quality evaluation, threshold tuning, index rebuild)
-2. **Agent Layer** - Specialized agents (Threshold Optimizer, Index Rebuilder)
-3. **Orchestration Layer** - Supervisor agent with 8-category diagnosis
+The supervisor orchestrates threshold optimization and index maintenance through a multi-step workflow:
 
-**How It Works:**
-- Monitors semantic drift using KL divergence and centroid shift
-- Tests multiple threshold candidates (0.75-0.98)
-- Multi-objective optimization: precision 45%, recall 25%, cost 20%, latency 10%
-- Safe index rebuild: build new → validate → swap → backup
-- Complete audit trail of all decisions
+1. **Diagnosis**: Classifies system state into 8 categories (healthy, low precision, high drift, stale index, etc.)
+2. **Recommendation**: Maps diagnosis to remediation actions (raise threshold, rebuild index, monitor only)
+3. **Execution**: Runs threshold optimizer or index rebuilder
+4. **Validation**: Checks if metrics improved (precision, recall, false hit rate)
+5. **Audit**: Logs complete decision path to PostgreSQL
+
+**Threshold Optimization:**
+- Grid search over candidate thresholds (e.g., [0.75, 0.80, 0.85, 0.90, 0.95, 0.98])
+- Multi-objective scoring: precision (45%), recall (25%), cost savings (20%), latency (10%)
+- Safety constraints: never lower precision below 85%, penalize false hits 2x
+
+**Drift Detection:**
+- Compares recent vs. reference embedding distributions using SciPy
+- Metrics: centroid shift (cosine distance), variance shift, KS-test p-value, Wasserstein distance
+- Triggers optimization when drift severity reaches threshold
