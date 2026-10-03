@@ -43,7 +43,7 @@ jobs:
         REQUIRE_API_KEY: false
       run: |
         cd backend
-        python -m pytest tests/ -v -x -m "not integration"
+        python -m pytest tests/ -v -s --tb=short -m "not integration"
 
     - name: Upload test results
       if: always()
