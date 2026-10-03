@@ -260,6 +260,45 @@ class MetadataStore:
             "models_used": list(models),
         }
 
+    def get_stale_vector_ratio(self, ttl_seconds: Optional[int] = None) -> float:
+        """
+        Compute ratio of expired/stale vectors to total vectors
+
+        Args:
+            ttl_seconds: Time-to-live in seconds. Defaults to settings.CACHE_TTL_SECONDS
+
+        Returns:
+            Ratio of stale vectors (0.0 to 1.0)
+        """
+        if not self.metadata:
+            return 0.0
+
+        # Get TTL from settings if not provided
+        if ttl_seconds is None:
+            from app.core.config import settings
+            ttl_seconds = settings.CACHE_TTL_SECONDS
+
+        # Count expired entries
+        now = datetime.utcnow()
+        expired_count = 0
+
+        for metadata in self.metadata.values():
+            # Check if entry has expired based on timestamp + TTL
+            if metadata.timestamp:
+                age_seconds = (now - metadata.timestamp).total_seconds()
+                if age_seconds > ttl_seconds:
+                    expired_count += 1
+
+        total_count = len(self.metadata)
+        ratio = expired_count / total_count if total_count > 0 else 0.0
+
+        logger.debug(
+            f"Stale vector ratio: {expired_count}/{total_count} = {ratio:.3f} "
+            f"(TTL={ttl_seconds}s)"
+        )
+
+        return ratio
+
     def __len__(self) -> int:
         """Get count of metadata entries"""
         return len(self.metadata)
