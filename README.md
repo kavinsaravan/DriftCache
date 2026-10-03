@@ -23,6 +23,7 @@ DriftCache is an OpenAI-compatible API proxy that caches semantically similar LL
 | Vector Search | FAISS, sentence-transformers (all-MiniLM-L6-v2) |
 | ML Training | PyTorch 2.2, Sentence Transformers, Hugging Face |
 | Drift Detection | SciPy (KS-test, Wasserstein), NumPy |
+| Agent Orchestration | LangGraph (StateGraph), LangChain (BaseTool) |
 | LLM Providers | OpenAI GPT-4/4o-mini, Anthropic Claude |
 | Infrastructure | Docker, Alembic, SQLAlchemy |
 
@@ -432,15 +433,36 @@ See [FINE_TUNING_IMPLEMENTATION.md](FINE_TUNING_IMPLEMENTATION.md) for detailed 
 
 ## Optimization System
 
-**Policy-Driven Remediation:**
+**LangGraph-Powered Remediation:**
 
-The supervisor orchestrates threshold optimization and index maintenance through a multi-step workflow:
+Built with **LangGraph StateGraph** for stateful workflow orchestration:
 
-1. **Diagnosis**: Classifies system state into 8 categories (healthy, low precision, high drift, stale index, etc.)
-2. **Recommendation**: Maps diagnosis to remediation actions (raise threshold, rebuild index, monitor only)
-3. **Execution**: Runs threshold optimizer or index rebuilder
-4. **Validation**: Checks if metrics improved (precision, recall, false hit rate)
-5. **Audit**: Logs complete decision path to PostgreSQL
+### Architecture
+
+```
+┌─────────────────────────────────────────────┐
+│         LangGraph StateGraph                │
+│                                             │
+│  load_system_state → diagnose → recommend  │
+│         ↓                                   │
+│    execute_action ←─┐                       │
+│         ↓           │ (conditional loop)    │
+│  validate_action ───┘                       │
+│         ↓                                   │
+│     finalize → END                          │
+└─────────────────────────────────────────────┘
+```
+
+### Workflow Steps
+
+1. **load_system_state** - Query drift, quality, and metrics tools (LangChain BaseTool)
+2. **diagnose** - Classify system into 8 health categories (healthy, low precision, high drift, stale index, etc.)
+3. **recommend** - Map diagnosis to remediation actions using policy rules
+4. **execute_action** - Run specialized agents (ThresholdOptimizer, IndexRebuilder)
+5. **validate_action** - Check if metrics improved (precision, recall, false hit rate)
+6. **Conditional routing** - Continue with more actions or finalize based on validation
+
+All state transitions managed by LangGraph with full audit trail stored in PostgreSQL.
 
 **Threshold Optimization:**
 - Grid search over candidate thresholds (e.g., [0.75, 0.80, 0.85, 0.90, 0.95, 0.98])

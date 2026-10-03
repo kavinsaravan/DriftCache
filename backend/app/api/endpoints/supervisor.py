@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.database.session import get_db
 from app.models.supervisor_run import SupervisorRun
-from app.agents.supervisor import SupervisorAgent
+from app.agents.langgraph_supervisor import LangGraphSupervisor
 from app.agents.reports.agent_report import AgentReportFormatter
 
 router = APIRouter()
@@ -64,7 +64,7 @@ def run_supervisor_workflow(
     }
     """
     try:
-        supervisor = SupervisorAgent(dry_run=dry_run)
+        supervisor = LangGraphSupervisor(dry_run=dry_run)
 
         result = supervisor.run_remediation_workflow(
             trigger_reason=trigger_reason,
