@@ -8,6 +8,8 @@ from langchain.tools import BaseTool
 from pydantic import BaseModel, Field
 import logging
 from datetime import datetime
+from app.database.session import SessionLocal
+from app.services.threshold_config import get_active_threshold, set_active_threshold
 
 logger = logging.getLogger(__name__)
 
@@ -38,19 +40,23 @@ class GetThresholdTool(BaseTool):
     args_schema: type[BaseModel] = GetThresholdInput
 
     def _run(self, tenant_id: Optional[str] = None) -> Dict[str, Any]:
-        """Get current threshold"""
+        """Get current threshold from database"""
         try:
             logger.info(f"Getting current threshold for tenant_id={tenant_id}")
 
-            #  Return mock configuration
-            #  Will integrate with actual config store
-            return {
-                "current_threshold": 0.90,
-                "last_updated": datetime.utcnow().isoformat(),
-                "set_by": "system_default",
-                "tenant_id": tenant_id,
-                "status": "success"
-            }
+            db = SessionLocal()
+            try:
+                current_threshold = get_active_threshold(db, tenant_id=tenant_id)
+
+                return {
+                    "current_threshold": current_threshold,
+                    "last_updated": datetime.utcnow().isoformat(),
+                    "set_by": "database",
+                    "tenant_id": tenant_id,
+                    "status": "success"
+                }
+            finally:
+                db.close()
 
         except Exception as e:
             logger.error(f"Failed to get threshold: {e}")
@@ -117,41 +123,75 @@ class UpdateThresholdTool(BaseTool):
                     "status": "failed"
                 }
 
-            # Simulation mode (dry-run only for safety)
-            old_threshold = 0.90  # Estimated from config
+            db = SessionLocal()
+            try:
+                # Get current threshold
+                old_threshold = get_active_threshold(db, tenant_id=tenant_id)
 
-            # Estimate impact
-            direction = "increase" if new_threshold > old_threshold else "decrease"
-            impact = abs(new_threshold - old_threshold)
+                # Estimate impact
+                direction = "increase" if new_threshold > old_threshold else "decrease"
+                impact = abs(new_threshold - old_threshold)
 
-            estimated_precision_change = impact * 0.05 if direction == "increase" else -impact * 0.03
-            estimated_recall_change = -impact * 0.10 if direction == "increase" else impact * 0.15
+                estimated_precision_change = impact * 0.05 if direction == "increase" else -impact * 0.03
+                estimated_recall_change = -impact * 0.10 if direction == "increase" else impact * 0.15
 
-            return {
-                "status": "simulated",
-                "old_threshold": old_threshold,
-                "new_threshold": new_threshold,
-                "change": round(new_threshold - old_threshold, 4),
-                "direction": direction,
-                "reason": reason,
-                "action": "would_update",
-                "message": f"DRY RUN: Would update threshold from {old_threshold} to {new_threshold}",
-                "estimated_impact": {
-                    "precision_change": f"{estimated_precision_change:+.2%}",
-                    "recall_change": f"{estimated_recall_change:+.2%}",
-                    "recommendation": (
-                        "Increase precision, slight recall drop" if direction == "increase"
-                        else "Increase recall, slight precision risk"
+                if dry_run:
+                    # Simulation mode
+                    return {
+                        "status": "simulated",
+                        "old_threshold": old_threshold,
+                        "new_threshold": new_threshold,
+                        "change": round(new_threshold - old_threshold, 4),
+                        "direction": direction,
+                        "reason": reason,
+                        "action": "would_update",
+                        "message": f"DRY RUN: Would update threshold from {old_threshold} to {new_threshold}",
+                        "estimated_impact": {
+                            "precision_change": f"{estimated_precision_change:+.2%}",
+                            "recall_change": f"{estimated_recall_change:+.2%}",
+                            "recommendation": (
+                                "Increase precision, slight recall drop" if direction == "increase"
+                                else "Increase recall, slight precision risk"
+                            )
+                        },
+                        "details": {
+                            "would_update_config": True,
+                            "would_log_change": True,
+                            "would_notify": True,
+                            "requires_restart": False,
+                            "reason": reason
+                        }
+                    }
+                else:
+                    # Actually update the threshold
+                    new_record = set_active_threshold(
+                        db=db,
+                        new_threshold=new_threshold,
+                        reason=reason,
+                        created_by="agent:threshold_optimizer",
+                        tenant_id=tenant_id
                     )
-                },
-                "details": {
-                    "would_update_config": True,
-                    "would_log_change": True,
-                    "would_notify": True,
-                    "requires_restart": False,
-                    "reason": reason
-                }
-            }
+
+                    return {
+                        "status": "applied",
+                        "old_threshold": old_threshold,
+                        "new_threshold": new_threshold,
+                        "change": round(new_threshold - old_threshold, 4),
+                        "direction": direction,
+                        "reason": reason,
+                        "action": "updated",
+                        "message": f"Updated threshold from {old_threshold} to {new_threshold}",
+                        "threshold_version_id": new_record.id,
+                        "deployed_at": new_record.deployed_at.isoformat(),
+                        "details": {
+                            "updated_config": True,
+                            "logged_change": True,
+                            "requires_restart": False,
+                            "reason": reason
+                        }
+                    }
+            finally:
+                db.close()
 
         except Exception as e:
             logger.error(f"Threshold update failed: {e}")

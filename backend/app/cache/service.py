@@ -27,6 +27,8 @@ from app.models.cache_schemas import (
 )
 from app.models.schemas import Message
 from app.core.config import settings
+from app.database.session import SessionLocal
+from app.services.threshold_config import get_active_threshold
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +109,18 @@ class CacheService:
         # Extract cache key
         cache_key = self._extract_cache_key(messages, model_name, tenant_id)
 
+        # Get active threshold from DB if no config provided
+        threshold = None
+        if config:
+            threshold = config.similarity_threshold
+        else:
+            # Get from database
+            db = SessionLocal()
+            try:
+                threshold = get_active_threshold(db, tenant_id=tenant_id)
+            finally:
+                db.close()
+
         # Generate embedding
         embedding_text = cache_key.to_embedding_text(
             include_system=config.include_system_prompt if config else True
@@ -120,7 +134,7 @@ class CacheService:
         # Search for similar cached responses in FAISS
         cache_entry = self.search_service.get_cache_entry(
             query_embedding=embedding,
-            threshold=config.similarity_threshold if config else None
+            threshold=threshold
         )
 
         # Get cached response from Redis if found

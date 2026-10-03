@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     # API Settings
     API_V1_PREFIX: str = "/api/v1"
     PROJECT_NAME: str = "DriftCache"
+    API_KEY: str = Field(default="", description="API key for authentication (set in production)")
+    REQUIRE_API_KEY: bool = Field(default=True, description="Require API key for requests")
 
     # CORS
     CORS_ORIGINS: List[str] = [

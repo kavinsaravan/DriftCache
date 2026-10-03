@@ -155,7 +155,7 @@ DriftCache/
 │  │  Fine-Tuning Pipeline               │   │
 │  │  - Training Data Collection         │   │
 │  │  - PyTorch Contrastive Learning     │   │
-│  │  - Model Evaluation & A/B Testing   │   │
+│  │  - Model Evaluation & Versioning    │   │
 │  └─────────────────────────────────────┘   │
 │                                            │
 │  ┌─────────────────────────────────────┐   │
@@ -196,7 +196,6 @@ DriftCache/
 - **Contrastive Learning**: PyTorch training with Multiple Negatives Ranking Loss
 - **Model Evaluation**: Precision@K, Recall@K, MRR, NDCG metrics
 - **Model Versioning**: Hugging Face Hub integration for model registry
-- **A/B Testing**: Gradual model rollout with traffic splitting
 
 ### 4. Optimization & Drift Detection
 - **Statistical Drift Detection**: KS-test, Wasserstein distance on similarity distributions
@@ -411,15 +410,7 @@ POST /api/v1/training/jobs
 - Normalized Discounted Cumulative Gain (NDCG)
 - Latency benchmarking
 
-**4. A/B Testing & Deployment**
-```bash
-POST /api/v1/training/models/{version_id}/deploy
-```
-- Deploy new models with traffic percentage (10% → 50% → 100%)
-- Compare performance against baseline
-- Safe rollback if regression detected
-
-**5. Hugging Face Integration**
+**4. Hugging Face Integration**
 - Upload models to Hugging Face Hub
 - Model versioning and registry
 - Easy sharing and collaboration

@@ -65,6 +65,12 @@ logs/
 *.sqlite
 *.sqlite3
 
+# FAISS index and cache data
+backend/data/cache/faiss.index
+backend/data/cache/metadata.json
+data/cache/faiss.index
+data/cache/metadata.json
+
 # Docker
 docker-compose.override.yml
 

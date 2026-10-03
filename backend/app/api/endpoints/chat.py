@@ -6,12 +6,13 @@ Supports both streaming and non-streaming modes with full caching:
 - Server-Sent Events (SSE) for streaming with cache hits
 - Response collection and caching for streaming misses
 - Database recording of all requests
+- API key authentication
 - Error handling
 """
 import time
 import logging
 from typing import Union
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 
 from app.models.schemas import (
@@ -27,6 +28,7 @@ from app.models.schemas import (
 from app.providers.router import provider_router
 from app.services.streaming import StreamCollector, create_cached_stream
 from app.services.cache_recorder import get_cache_recorder
+from app.core.auth import verify_api_key
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -34,11 +36,15 @@ cache_recorder = get_cache_recorder()
 
 
 @router.post("/chat/completions", response_model=None)
-async def create_chat_completion(request: ChatCompletionRequest) -> Union[ChatCompletionResponse, StreamingResponse]:
+async def create_chat_completion(
+    request: ChatCompletionRequest,
+    api_key: str = Depends(verify_api_key)
+) -> Union[ChatCompletionResponse, StreamingResponse]:
     """
     OpenAI-compatible chat completion endpoint
 
     Supports:
+    - API key authentication via X-API-Key header
     - Non-streaming responses with cache check/store
     - Streaming responses (SSE) with cache check/store
     - Cache hits return cached content (streamed or non-streamed)
@@ -108,8 +114,17 @@ async def create_chat_completion(request: ChatCompletionRequest) -> Union[ChatCo
                 try:
                     logger.info(
                         f"Stream completed: {response.chunks_received} chunks, "
-                        f"{len(response.content)} characters"
+                        f"{len(response.content)} characters, "
+                        f"finish_reason={response.finish_reason}"
                     )
+
+                    # Only cache if response completed successfully
+                    if response.finish_reason != "stop":
+                        logger.warning(
+                            f"Skipping cache storage: finish_reason={response.finish_reason} "
+                            f"(truncated or filtered response)"
+                        )
+                        return
 
                     # Store in cache + database
                     await cache_recorder.store_and_record(
@@ -207,19 +222,27 @@ async def create_chat_completion(request: ChatCompletionRequest) -> Union[ChatCo
                 top_p=request.top_p,
             )
 
-            # Store response in cache + database for future requests
-            response_text = response.choices[0].message.content
-            await cache_recorder.store_and_record(
-                request_id=request_id,
-                messages=request.messages,
-                response_text=response_text,
-                model_name=request.model,
-                provider="openai",
-                input_tokens=response.usage.prompt_tokens if response.usage else None,
-                output_tokens=response.usage.completion_tokens if response.usage else None,
-                estimated_cost=None  # Cost calculation based on token usage
-            )
-            logger.info(f"Stored in cache+DB: {response.usage.total_tokens if response.usage else 0} tokens")
+            # Only cache if response completed successfully
+            finish_reason = response.choices[0].finish_reason if response.choices else None
+            if finish_reason != "stop":
+                logger.warning(
+                    f"Skipping cache storage: finish_reason={finish_reason} "
+                    f"(truncated or filtered response)"
+                )
+            else:
+                # Store response in cache + database for future requests
+                response_text = response.choices[0].message.content
+                await cache_recorder.store_and_record(
+                    request_id=request_id,
+                    messages=request.messages,
+                    response_text=response_text,
+                    model_name=request.model,
+                    provider="openai",
+                    input_tokens=response.usage.prompt_tokens if response.usage else None,
+                    output_tokens=response.usage.completion_tokens if response.usage else None,
+                    estimated_cost=None  # Cost calculation based on token usage
+                )
+                logger.info(f"Stored in cache+DB: {response.usage.total_tokens if response.usage else 0} tokens")
 
             # Add cache metadata to response
             response_dict = response.model_dump()
@@ -230,12 +253,13 @@ async def create_chat_completion(request: ChatCompletionRequest) -> Union[ChatCo
     except HTTPException:
         raise
     except Exception as e:
-        # Handle unexpected errors
+        # Handle unexpected errors - don't expose internal details
+        logger.error(f"Internal error in chat completion: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
                 error=ErrorDetail(
-                    message=str(e),
+                    message="An internal error occurred. Please try again later.",
                     type="api_error",
                     code="internal_error"
                 )

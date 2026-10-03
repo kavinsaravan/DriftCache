@@ -246,7 +246,7 @@ async def create_cached_stream(
     content: str,
     model: str,
     completion_id: Optional[str] = None,
-    chunk_size: int = 5
+    chunk_size: int = 20
 ) -> AsyncIterator[str]:
     """
     Create a stream from cached content
@@ -258,7 +258,7 @@ async def create_cached_stream(
         content: The cached content to stream
         model: Model name
         completion_id: Optional completion ID
-        chunk_size: Words per chunk
+        chunk_size: Characters per chunk (preserves whitespace)
 
     Yields:
         SSE-formatted chunks simulating a real stream
@@ -282,17 +282,9 @@ async def create_cached_stream(
     )
     yield SSEFormatter.format_chunk(initial_chunk)
 
-    # Split content into words
-    words = content.split()
-
-    # Stream in chunks
-    for i in range(0, len(words), chunk_size):
-        chunk_words = words[i:i + chunk_size]
-        chunk_content = " ".join(chunk_words)
-
-        # Add space before chunk if not first
-        if i > 0:
-            chunk_content = " " + chunk_content
+    # Stream in character chunks to preserve whitespace (newlines, tabs, etc.)
+    for i in range(0, len(content), chunk_size):
+        chunk_content = content[i:i + chunk_size]
 
         content_chunk = ChatCompletionStreamResponse(
             id=completion_id,
