@@ -235,7 +235,11 @@ docker compose up --build
 open http://localhost
 ```
 
-**Security Note:** The dashboard uses `METRICS_API_KEY` (read-only) instead of the main `API_KEY`. This allows safe embedding in the frontend build without exposing write access. Set both keys in your backend `.env` file.
+**Security Note:** The dashboard uses `METRICS_API_KEY` (read-only) instead of the main `API_KEY`. This prevents write operations but still exposes:
+- Cached prompts via `/metrics/top-cached-prompts`
+- Performance data for any `tenant_id`
+
+For single-user demos, embedding `METRICS_API_KEY` in the frontend is acceptable. For production multi-tenant deployments, implement server-side rendering or a backend proxy to keep all keys secure. Set both keys in your backend `.env` file.
 
 ## Integration Guide
 

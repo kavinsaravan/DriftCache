@@ -213,6 +213,38 @@ class CacheKey(BaseModel):
         # System prompt and history are matched via exact hash comparison
         return self.prompt_text
 
+    def to_cache_key_hash(self) -> str:
+        """
+        Generate a unique hash for Redis cache key
+
+        Includes all fields that must match exactly:
+        - tenant_id
+        - model_name
+        - system_prompt
+        - conversation_history
+        - prompt_text
+
+        This prevents key collisions when different conversations
+        end with the same question.
+
+        Returns:
+            SHA256 hash of all key components
+        """
+        import hashlib
+
+        # Build a canonical string representation
+        components = [
+            f"tenant:{self.tenant_id}",
+            f"model:{self.model_name or ''}",
+            f"system:{self.system_prompt or ''}",
+            f"history:{self.conversation_history or ''}",
+            f"prompt:{self.prompt_text}"
+        ]
+        canonical = "|".join(components)
+
+        # Hash to fixed-length identifier
+        return hashlib.sha256(canonical.encode('utf-8')).hexdigest()
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
         return {

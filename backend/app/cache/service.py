@@ -151,17 +151,20 @@ class CacheService:
         if cache_entry:
             similarity = cache_entry.similarity
 
+            # Generate the same cache key hash used during storage
+            cache_key_hash = cache_key.to_cache_key_hash()
+
             # Try Redis first (online serving layer)
             cached_response = await self.redis_store.get_cached_response(
-                cache_entry.prompt_id
+                cache_key_hash
             )
             retrieval_source = "redis"
 
             # Fallback to legacy store if not in Redis
             if not cached_response:
-                cached_response = self.cache_store.get(cache_entry.prompt_id)
+                cached_response = self.cache_store.get(cache_key_hash)
                 retrieval_source = "legacy"
-                logger.debug(f"Redis miss, using legacy store for {cache_entry.prompt_id[:8]}...")
+                logger.debug(f"Redis miss, using legacy store for {cache_key_hash[:8]}...")
 
         # Make decision
         decision_result = self.decision_engine.evaluate(
@@ -268,10 +271,11 @@ class CacheService:
         )
 
         # Store in Redis (online serving layer)
-        # IMPORTANT: Use prompt_hash as the key, not cache_id, so FAISS can find it
-        prompt_hash = embedding.metadata.prompt_hash
+        # IMPORTANT: Use cache_key hash that includes tenant, model, system, history, and prompt
+        # This prevents key collisions when different conversations end with the same question
+        cache_key_hash = cache_key.to_cache_key_hash()
         await self.redis_store.set_cached_response(
-            cache_id=prompt_hash,  # Use prompt_hash as key for FAISS lookup
+            cache_id=cache_key_hash,
             response=cached_response,
             ttl_seconds=ttl
         )
