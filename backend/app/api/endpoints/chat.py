@@ -1,9 +1,11 @@
 """
 OpenAI-compatible chat completion endpoints
 
-Supports both streaming and non-streaming modes with:
-- Server-Sent Events (SSE) for streaming
-- Response collection for caching
+Supports both streaming and non-streaming modes with full caching:
+- Cache check before streaming/non-streaming responses
+- Server-Sent Events (SSE) for streaming with cache hits
+- Response collection and caching for streaming misses
+- Database recording of all requests
 - Error handling
 """
 import time
@@ -23,7 +25,7 @@ from app.models.schemas import (
     ErrorDetail,
 )
 from app.providers.router import provider_router
-from app.services.streaming import StreamCollector
+from app.services.streaming import StreamCollector, create_cached_stream
 from app.services.cache_recorder import get_cache_recorder
 
 logger = logging.getLogger(__name__)
@@ -37,8 +39,10 @@ async def create_chat_completion(request: ChatCompletionRequest) -> Union[ChatCo
     OpenAI-compatible chat completion endpoint
 
     Supports:
-    - Non-streaming responses
-    - Streaming responses (SSE)
+    - Non-streaming responses with cache check/store
+    - Streaming responses (SSE) with cache check/store
+    - Cache hits return cached content (streamed or non-streamed)
+    - Cache misses call provider and store response
     - Request validation
     - Error handling
     """
@@ -59,11 +63,39 @@ async def create_chat_completion(request: ChatCompletionRequest) -> Union[ChatCo
         # Handle streaming vs non-streaming
         if request.stream:
             # STREAMING MODE
-            # We need to:
-            # 1. Stream tokens to client immediately (good UX)
-            # 2. Collect full response for caching (important for cache layer)
+            # Check cache first (similar to non-streaming)
+            request_id, cache_result = await cache_recorder.check_and_record(
+                messages=request.messages,
+                model_name=request.model,
+                stream=True
+            )
 
-            # Create stream collector
+            if cache_result.is_hit():
+                # Cache hit - stream the cached response
+                logger.info(f"✓ STREAMING CACHE HIT: similarity={cache_result.similarity:.3f}")
+                cached = cache_result.cached_response
+
+                # Create stream from cached content
+                cached_stream = create_cached_stream(
+                    content=cached.response_text,
+                    model=cached.model_name,
+                    completion_id=f"cached-{cached.cache_id[:8]}"
+                )
+
+                return StreamingResponse(
+                    cached_stream,
+                    media_type="text/event-stream",
+                    headers={
+                        "Cache-Control": "no-cache",
+                        "X-Accel-Buffering": "no",
+                        "X-Cache-Hit": "true",
+                        "X-Similarity-Score": str(cache_result.similarity)
+                    }
+                )
+
+            # Cache miss - stream from provider and collect for caching
+            logger.info(f"✗ STREAMING CACHE MISS: {cache_result.reason}")
+
             completion_id = f"chatcmpl-{int(time.time())}"
             collector = StreamCollector(
                 completion_id=completion_id,
@@ -72,16 +104,28 @@ async def create_chat_completion(request: ChatCompletionRequest) -> Union[ChatCo
 
             # Define callback for when stream completes
             async def on_stream_complete(response):
-                """
-                Called when streaming finishes
+                """Store the collected response in cache"""
+                try:
+                    logger.info(
+                        f"Stream completed: {response.chunks_received} chunks, "
+                        f"{len(response.content)} characters"
+                    )
 
-                This is where we'll cache the response in future iterations
-                """
-                logger.info(
-                    f"Stream completed: {response.chunks_received} chunks, "
-                    f"{len(response.content)} characters"
-                )
-                # TODO: Implement streaming response caching
+                    # Store in cache + database
+                    await cache_recorder.store_and_record(
+                        request_id=request_id,
+                        messages=request.messages,
+                        response_text=response.content,
+                        model_name=request.model,
+                        provider="openai",
+                        input_tokens=None,  # Not available in streaming mode
+                        output_tokens=None,
+                        estimated_cost=None
+                    )
+                    logger.info(f"Cached streaming response: {len(response.content)} chars")
+
+                except Exception as e:
+                    logger.error(f"Failed to cache streaming response: {e}")
 
             # Get provider stream
             provider_stream = provider_router.chat_completion_stream(
@@ -104,7 +148,8 @@ async def create_chat_completion(request: ChatCompletionRequest) -> Union[ChatCo
                 media_type="text/event-stream",
                 headers={
                     "Cache-Control": "no-cache",
-                    "X-Accel-Buffering": "no",  # Disable nginx buffering
+                    "X-Accel-Buffering": "no",
+                    "X-Cache-Hit": "false"
                 }
             )
 
