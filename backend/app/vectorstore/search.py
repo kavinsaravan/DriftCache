@@ -295,14 +295,12 @@ class SemanticSearchService:
                     continue
 
             # Filter by system prompt (must match exactly)
-            if system_prompt is not None or metadata.system_prompt is not None:
-                if system_prompt != metadata.system_prompt:
-                    continue
+            if system_prompt != metadata.system_prompt:
+                continue
 
             # Filter by conversation history (must match exactly for multi-turn)
-            if conversation_history is not None or metadata.conversation_history is not None:
-                if conversation_history != metadata.conversation_history:
-                    continue
+            if conversation_history != metadata.conversation_history:
+                continue
 
             # Check TTL expiration
             if metadata.timestamp:

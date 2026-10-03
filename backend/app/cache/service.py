@@ -27,7 +27,7 @@ from app.models.cache_schemas import (
 )
 from app.models.schemas import Message
 from app.core.config import settings
-from app.database.session import SessionLocal
+from app.database.session import get_db_manager
 from app.services.threshold_config import get_active_threshold
 
 logger = logging.getLogger(__name__)
@@ -114,12 +114,10 @@ class CacheService:
         if config:
             threshold = config.similarity_threshold
         else:
-            # Get from database
-            db = SessionLocal()
-            try:
+            # Get from database using proper context manager
+            db_manager = get_db_manager()
+            with db_manager.session_scope() as db:
                 threshold = get_active_threshold(db, tenant_id=tenant_id)
-            finally:
-                db.close()
 
         # Generate embedding
         embedding_text = cache_key.to_embedding_text(

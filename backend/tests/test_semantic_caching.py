@@ -20,30 +20,26 @@ async def isolated_cache_service(tmp_path):
 
     This prevents tests from polluting each other and the real cache.
     """
-    # Create isolated directories
-    cache_dir = tmp_path / "cache"
-    cache_dir.mkdir()
-
-    # TODO: In a full implementation, override FAISS/metadata paths
-    # For now, tests will use shared state (acceptable for initial testing)
-
-    # Flush Redis test database
+    # Create cache service
     cache_service = CacheService()
-    if cache_service.redis_store:
-        # Use a dedicated test database (e.g., DB 15)
-        # await cache_service.redis_store.client.flushdb()
-        pass
+
+    # Initialize Redis store and clear all data
+    from app.cache.redis_store import get_redis_store
+    cache_service.redis_store = await get_redis_store()
+
+    # Clear all caches to ensure isolation
+    await cache_service.clear_cache()
 
     yield cache_service
 
-    # Cleanup after test
-    # In a full implementation, restore original paths
+    # Cleanup after test - clear again to not pollute other tests
+    await cache_service.clear_cache()
 
 
 @pytest.mark.asyncio
-async def test_exact_repeat_should_hit():
+async def test_exact_repeat_should_hit(isolated_cache_service):
     """Test 1: Exact repeat should always hit"""
-    cache_service = CacheService()
+    cache_service = isolated_cache_service
 
     messages = [{"role": "user", "content": "What is Python?"}]
     messages_typed = [Message(**msg) for msg in messages]
@@ -71,9 +67,9 @@ async def test_exact_repeat_should_hit():
 
 
 @pytest.mark.asyncio
-async def test_paraphrase_should_hit():
+async def test_paraphrase_should_hit(isolated_cache_service):
     """Test 2: Paraphrase should hit (semantic matching)"""
-    cache_service = CacheService()
+    cache_service = isolated_cache_service
 
     # Store with one phrasing
     messages_original = [{"role": "user", "content": "What is Python?"}]
@@ -120,9 +116,9 @@ async def test_paraphrase_should_hit():
 
 
 @pytest.mark.asyncio
-async def test_same_history_should_hit():
+async def test_same_history_should_hit(isolated_cache_service):
     """Test 3a: Same conversation history should hit"""
-    cache_service = CacheService()
+    cache_service = isolated_cache_service
 
     messages = [
         {"role": "user", "content": "What is Redis?"},
@@ -152,9 +148,9 @@ async def test_same_history_should_hit():
 
 
 @pytest.mark.asyncio
-async def test_different_history_should_miss():
+async def test_different_history_should_miss(isolated_cache_service):
     """Test 3b: Different conversation history should miss"""
-    cache_service = CacheService()
+    cache_service = isolated_cache_service
 
     # Store a response in conversation A
     messages_a = [
@@ -194,9 +190,9 @@ async def test_different_history_should_miss():
 
 
 @pytest.mark.asyncio
-async def test_same_system_prompt_should_hit():
+async def test_same_system_prompt_should_hit(isolated_cache_service):
     """Test 4a: Same system prompt should hit"""
-    cache_service = CacheService()
+    cache_service = isolated_cache_service
 
     messages = [
         {"role": "system", "content": "You are a helpful assistant."},
@@ -225,9 +221,9 @@ async def test_same_system_prompt_should_hit():
 
 
 @pytest.mark.asyncio
-async def test_different_system_prompt_should_miss():
+async def test_different_system_prompt_should_miss(isolated_cache_service):
     """Test 4b: Different system prompt should miss"""
-    cache_service = CacheService()
+    cache_service = isolated_cache_service
 
     # Store with system prompt A
     messages_a = [
@@ -265,9 +261,9 @@ async def test_different_system_prompt_should_miss():
 
 
 @pytest.mark.asyncio
-async def test_same_tenant_should_hit():
+async def test_same_tenant_should_hit(isolated_cache_service):
     """Test 5a: Same tenant should hit"""
-    cache_service = CacheService()
+    cache_service = isolated_cache_service
 
     messages = [{"role": "user", "content": "What is Python?"}]
     messages_typed = [Message(**msg) for msg in messages]
@@ -293,9 +289,9 @@ async def test_same_tenant_should_hit():
 
 
 @pytest.mark.asyncio
-async def test_different_tenant_should_miss():
+async def test_different_tenant_should_miss(isolated_cache_service):
     """Test 5b: Different tenant should miss"""
-    cache_service = CacheService()
+    cache_service = isolated_cache_service
 
     messages = [{"role": "user", "content": "What is Python?"}]
     messages_typed = [Message(**msg) for msg in messages]

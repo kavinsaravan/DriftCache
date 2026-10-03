@@ -274,7 +274,7 @@ class CacheRecorder:
                     # Get latest vector ID from FAISS
                     # This assumes vectors are added sequentially
                     faiss_index = self.cache_service.search_service.faiss_index
-                    if faiss_index.index is not None and faiss_index.index.ntotal > 0:
+                    if faiss_index is not None and faiss_index.index is not None and faiss_index.index.ntotal > 0:
                         faiss_vector_id = faiss_index.index.ntotal - 1
 
                         cache_repo.create_embedding_record(
