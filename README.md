@@ -208,7 +208,6 @@ DriftCache/
 
 ### 6. API Layer (FastAPI)
 - **REST Endpoints**: HTTP API for applications
-- **WebSocket**: Real-time updates and monitoring
 - **Authentication**: API key management
 
 ### 7. Frontend Dashboard (React)
