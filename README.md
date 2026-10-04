@@ -15,22 +15,22 @@ DriftCache is an OpenAI-compatible API proxy that caches semantically similar LL
 
 ## Performance Metrics
 
-Real evaluation results from labeled datasets (140 test pairs: semantic duplicates + hard negatives):
+Evaluation results on 140 labeled test pairs (semantic duplicates + hard negatives):
 
-| Similarity Threshold | Precision | Recall | F1 Score | False Hit Rate | Use Case |
-|---------------------|-----------|--------|----------|----------------|----------|
-| **0.85** (Balanced) | **97.5%** | **55.7%** | **70.9%** | **2.5%** | Production default - high safety with good savings |
-| **0.90** (Conservative) | **100%** | **31.4%** | **47.8%** | **0%** | Maximum safety - zero wrong answers |
-| 0.92 | 100% | 20.0% | 33.3% | 0% | Ultra-conservative |
-| 0.95 | 100% | 5.7% | 10.8% | 0% | Near-exact match only |
+| Similarity Threshold | Precision | Recall | F1 Score | Use Case |
+|---------------------|-----------|--------|----------|----------|
+| **0.85** (Balanced) | **97.5%** | **55.7%** | **70.9%** | Production default - high safety with good coverage |
+| **0.90** (Conservative) | **100%** | **31.4%** | **47.8%** | Maximum safety - zero wrong answers |
+| 0.92 | 100% | 20.0% | 33.3% | Ultra-conservative |
+| 0.95 | 100% | 5.7% | 10.8% | Near-exact match only |
 
 **Key Insights:**
 - **Precision**: Accuracy of cache hits (% of cached responses that are correct)
-- **Recall**: Coverage (% of semantically similar queries successfully cached)
-- **False Hit Rate**: Critical safety metric (% of cache hits that serve wrong answers)
-- **Trade-off**: Higher thresholds = safer but fewer savings; lower thresholds = more savings but higher risk
+- **Recall**: Coverage (% of matching pairs successfully cached at this threshold)
+- **Trade-off**: Higher thresholds = safer but less coverage; lower thresholds = more coverage but higher risk
+- **Testing method**: Pair-wise similarity on labeled data (not full cache simulation)
 
-At the default 0.85 threshold: **97.5% precision** means only 1 in 40 cache hits is questionable, while capturing over half of reusable queries.
+At 0.85, precision of 97.5% means 1 questionable hit out of 40 on this test set.
 
 ## Technology Stack
 
