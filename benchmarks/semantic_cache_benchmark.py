@@ -10,13 +10,15 @@ Tests DriftCache performance across multiple dimensions:
 - Semantic matching accuracy
 """
 
+import argparse
 import json
+import os
 import time
 import statistics
 from pathlib import Path
 from typing import List, Dict, Any
 from dataclasses import dataclass, asdict
-import requests
+import httpx
 from datetime import datetime
 
 
@@ -68,9 +70,14 @@ class BenchmarkResult:
 class DriftCacheBenchmark:
     """Benchmark runner for DriftCache"""
     
-    def __init__(self, api_base_url: str = "http://localhost:8000"):
+    def __init__(
+        self,
+        api_base_url: str = "http://localhost:8000",
+        api_key: str | None = None,
+    ):
         self.api_base_url = api_base_url
-        self.datasets_dir = Path(__file__).parent / "datasets"
+        self.headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        self.datasets_dir = Path(__file__).parent.parent / "datasets"
         self.results_dir = Path(__file__).parent / "results"
         self.results_dir.mkdir(exist_ok=True)
         
@@ -94,7 +101,7 @@ class DriftCacheBenchmark:
         }
         
         start_time = time.time()
-        response = requests.post(url, json=payload)
+        response = httpx.post(url, json=payload, headers=self.headers, timeout=60)
         latency_ms = (time.time() - start_time) * 1000
         
         if response.status_code == 200:
@@ -117,7 +124,7 @@ class DriftCacheBenchmark:
     def run_exact_repeats_test(self) -> Dict[str, Any]:
         """Test 1: Exact repeats - should have very high cache hit rate"""
         print("\n=== Test 1: Exact Repeats ===")
-        dataset = self.load_dataset("easy_duplicates.json")
+        dataset = self.load_dataset("exact_repeats.json")
         
         results = []
         for prompt_config in dataset["prompts"]:
@@ -415,5 +422,12 @@ class DriftCacheBenchmark:
 
 
 if __name__ == "__main__":
-    benchmark = DriftCacheBenchmark()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--api-url", default="http://localhost:8000")
+    parser.add_argument(
+        "--api-key",
+        default=os.getenv("DRIFTCACHE_API_KEY") or os.getenv("API_KEY"),
+    )
+    args = parser.parse_args()
+    benchmark = DriftCacheBenchmark(args.api_url.rstrip("/"), args.api_key)
     results = benchmark.run_full_benchmark()

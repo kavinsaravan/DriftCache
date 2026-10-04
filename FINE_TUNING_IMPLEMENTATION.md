@@ -68,30 +68,7 @@ metrics = trainer.train(train_dataloader, config)
 
 ---
 
-### 3. **Evaluation Framework** (`app/training/evaluator.py`)
-**Purpose**: Measure model performance using standard IR metrics
-
-**Key Metrics:**
-- **Precision@K**: Fraction of top-K results that are relevant
-- **Recall@K**: Fraction of relevant items in top-K
-- **MRR (Mean Reciprocal Rank)**: Average reciprocal rank of first relevant item
-- **NDCG**: Normalized Discounted Cumulative Gain
-- **Similarity distributions**: Average similarity for positives vs negatives
-- **Latency benchmarking**: Inference speed measurement
-
-**Example Usage:**
-```python
-evaluator = ModelEvaluator(finetuned_model)
-metrics = evaluator.evaluate_on_test_set(db, test_size=200)
-
-# Compare with baseline
-comparison = evaluator.compare_models(baseline_model, db)
-# Returns: {baseline_metrics, finetuned_metrics, improvements}
-```
-
----
-
-### 4. **Database Schema** (Migration `009_add_training_tables.py`)
+### 3. **Database Schema** (Migration `009_add_training_tables.py`)
 
 **Tables Created:**
 
@@ -137,7 +114,7 @@ comparison = evaluator.compare_models(baseline_model, db)
 
 ---
 
-### 5. **REST API Endpoints** (`app/api/endpoints/training.py`)
+### 4. **REST API Endpoints** (`app/api/endpoints/training.py`)
 
 #### **Data Collection**
 - `POST /api/v1/training/collect-data`
@@ -160,7 +137,7 @@ comparison = evaluator.compare_models(baseline_model, db)
 
 ---
 
-### 6. **Pydantic Schemas** (`app/models/training_schemas.py`)
+### 5. **Pydantic Schemas** (`app/models/training_schemas.py`)
 Type-safe request/response models for all API endpoints:
 - `DataCollectionRequest`, `DataCollectionResponse`
 - `TrainingJobCreate`, `TrainingJobResponse`
@@ -217,4 +194,3 @@ Type-safe request/response models for all API endpoints:
 ```
 
 ---
-

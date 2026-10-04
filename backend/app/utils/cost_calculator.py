@@ -74,7 +74,8 @@ def calculate_cost(
         pricing = MODEL_PRICING[model_lower]
     else:
         # Try prefix match (e.g., "gpt-4-0613" matches "gpt-4")
-        for model_key in MODEL_PRICING:
+        # IMPORTANT: Check longest prefixes first to avoid "gpt-4o-mini-2024" matching "gpt-4"
+        for model_key in sorted(MODEL_PRICING.keys(), key=len, reverse=True):
             if model_lower.startswith(model_key):
                 pricing = MODEL_PRICING[model_key]
                 break
@@ -117,8 +118,8 @@ def get_model_pricing(model: str) -> Optional[Tuple[float, float]]:
     if model_lower in MODEL_PRICING:
         return MODEL_PRICING[model_lower]
 
-    # Try prefix match
-    for model_key in MODEL_PRICING:
+    # Try prefix match (longest first)
+    for model_key in sorted(MODEL_PRICING.keys(), key=len, reverse=True):
         if model_lower.startswith(model_key):
             return MODEL_PRICING[model_key]
 

@@ -17,7 +17,7 @@ pytestmark = pytest.mark.integration
 
 @pytest.mark.asyncio
 async def test_models_endpoint():
-    """Test /v1/models endpoint returns valid model list"""
+    """Test /api/v1/models endpoint returns valid model list"""
     async with httpx.AsyncClient() as client:
         response = await client.get(f"{BASE_URL}/models")
 
@@ -35,7 +35,7 @@ async def test_models_endpoint():
 
 @pytest.mark.asyncio
 async def test_chat_completion_non_streaming():
-    """Test /v1/chat/completions returns valid non-streaming response"""
+    """Test /api/v1/chat/completions returns valid non-streaming response"""
     payload = {
         "model": "gpt-4",
         "messages": [
@@ -68,7 +68,7 @@ async def test_chat_completion_non_streaming():
 
 @pytest.mark.asyncio
 async def test_chat_completion_streaming():
-    """Test /v1/chat/completions streaming returns SSE chunks"""
+    """Test /api/v1/chat/completions streaming returns SSE chunks"""
     payload = {
         "model": "claude-3-haiku",
         "messages": [

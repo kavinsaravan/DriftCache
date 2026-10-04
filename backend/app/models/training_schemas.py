@@ -5,7 +5,7 @@ Pydantic models for training API requests/responses
 """
 from typing import Optional, Dict, Any, List
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from enum import Enum
 
 
@@ -48,8 +48,7 @@ class TrainingPairResponse(BaseModel):
     used_in_training: int
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Data Collection Schemas
@@ -85,7 +84,6 @@ class TrainingConfig(BaseModel):
     loss_function: str = Field(default="MultipleNegativesRankingLoss", description="Loss function to use")
     evaluation_steps: int = Field(default=100, description="Steps between evaluations")
     save_steps: int = Field(default=500, description="Steps between checkpoints")
-    use_wandb: bool = Field(default=False, description="Enable Weights & Biases logging")
 
 
 class TrainingJobCreate(BaseModel):
@@ -115,8 +113,7 @@ class TrainingJobResponse(BaseModel):
     started_at: Optional[datetime]
     completed_at: Optional[datetime]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Model Version Schemas
@@ -149,8 +146,7 @@ class ModelVersionResponse(BaseModel):
     created_at: datetime
     deployed_at: Optional[datetime]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Evaluation Schemas

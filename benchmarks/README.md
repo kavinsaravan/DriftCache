@@ -42,18 +42,18 @@ python benchmarks/load_test.py
 
 ## Benchmark Datasets
 
-### datasets/easy_duplicates.json
+### ../datasets/exact_repeats.json
 Exact duplicate prompts repeated many times.
 - **Purpose**: Verify basic caching works
 - **Expected**: ~99% cache hit rate after first request
 
-### datasets/semantic_duplicates.json
+### ../datasets/semantic_duplicates.json
 Semantically similar prompts with different wording.
 - **Purpose**: Verify semantic matching works
 - **Expected**: High within-group cache hit rate (>70%)
 - **10 prompt groups** with 5 variations each
 
-### datasets/hard_negatives.json
+### ../datasets/hard_negatives.json
 Similar-looking prompts that should NOT match.
 - **Purpose**: Verify precision (no false positives)
 - **Expected**: Low within-group cache hit rate (<10%)
@@ -142,9 +142,8 @@ GET /benchmark/health
 docker compose up -d
 
 # Run benchmarks from host
-pip install requests aiohttp
-python benchmarks/semantic_cache_benchmark.py
-python benchmarks/load_test.py
+make benchmark
+make load-test
 
 # Or run inside backend container
 docker exec -it driftcache-backend python /app/../benchmarks/semantic_cache_benchmark.py

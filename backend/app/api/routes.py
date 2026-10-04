@@ -6,7 +6,7 @@ Endpoints use different auth based on their function:
 - Metrics endpoints accept either API_KEY or METRICS_API_KEY (read-only)
 """
 from fastapi import APIRouter, Depends
-from app.api.endpoints import chat, models, evaluation, metrics, drift, agents, supervisor, benchmark, vectorstore, training
+from app.api.endpoints import chat, models, evaluation, metrics, drift, benchmark, vectorstore, training
 from app.core.auth import verify_api_key, verify_metrics_key
 
 # Main router without global dependencies to avoid stacking
@@ -43,22 +43,6 @@ api_router.include_router(
     drift.router,
     prefix="/drift",
     tags=["drift"],
-    dependencies=[Depends(verify_api_key)]
-)
-
-# Autonomous agent endpoints (require main API key)
-api_router.include_router(
-    agents.router,
-    prefix="/agents",
-    tags=["agents"],
-    dependencies=[Depends(verify_api_key)]
-)
-
-# Supervisor orchestration endpoints (require main API key)
-api_router.include_router(
-    supervisor.router,
-    prefix="/supervisor",
-    tags=["supervisor"],
     dependencies=[Depends(verify_api_key)]
 )
 

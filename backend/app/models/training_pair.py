@@ -55,4 +55,5 @@ class TrainingPair(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     def __repr__(self) -> str:
-        return f"<TrainingPair(id={self.id}, type={self.pair_type}, similarity={self.similarity_score:.3f if self.similarity_score else 'N/A'})>"
+        similarity = f"{self.similarity_score:.3f}" if self.similarity_score is not None else "N/A"
+        return f"<TrainingPair(id={self.id}, type={self.pair_type}, similarity={similarity})>"

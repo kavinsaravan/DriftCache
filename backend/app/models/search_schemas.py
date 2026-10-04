@@ -5,7 +5,7 @@ Data models for vector search operations and results
 """
 from typing import List, Optional, Dict, Any
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class SearchQuery(BaseModel):
@@ -145,8 +145,8 @@ class CacheEntry(BaseModel):
     metadata: VectorMetadata
     is_cache_hit: bool = True
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "vector_id": 42,
                 "prompt_id": "abc123...",
@@ -157,3 +157,4 @@ class CacheEntry(BaseModel):
                 "is_cache_hit": True
             }
         }
+    )

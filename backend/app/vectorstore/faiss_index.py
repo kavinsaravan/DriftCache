@@ -37,7 +37,7 @@ class FAISSIndex:
 
         Args:
             dimension: Vector dimension (e.g., 384 for all-MiniLM-L6-v2)
-            index_type: Index type (Flat, IVF, HNSW)
+            index_type: Index type. Only Flat is currently supported.
             metric: Distance metric (L2 or IP for inner product)
         """
         self.dimension = dimension
@@ -57,29 +57,17 @@ class FAISSIndex:
 
         Uses IndexFlatL2 wrapped in IndexIDMap2 for exact search with removal support
         """
-        if self.index_type.lower() == "flat":
-            # Exact search using L2 distance
-            base_index = faiss.IndexFlatL2(self.dimension)
-            # Wrap in IndexIDMap2 to enable vector removal by ID
-            self.index = faiss.IndexIDMap2(base_index)
-            logger.info("Created IndexFlatL2 wrapped in IndexIDMap2 (exact search with removal support)")
+        if self.index_type.lower() != "flat":
+            raise ValueError(
+                f"Unsupported index type: {self.index_type}. "
+                "DriftCache currently supports only Flat indexes."
+            )
 
-        elif self.index_type.lower() == "ivf":
-            # Inverted File Index (faster, approximate)
-            # Requires training
-            quantizer = faiss.IndexFlatL2(self.dimension)
-            nlist = 100  # Number of clusters
-            self.index = faiss.IndexIVFFlat(quantizer, self.dimension, nlist)
-            logger.info(f"Created IndexIVFFlat with {nlist} clusters")
-
-        elif self.index_type.lower() == "hnsw":
-            # Hierarchical Navigable Small World (very fast, approximate)
-            M = 32  # Number of connections per vertex
-            self.index = faiss.IndexHNSWFlat(self.dimension, M)
-            logger.info(f"Created IndexHNSWFlat with M={M}")
-
-        else:
-            raise ValueError(f"Unknown index type: {self.index_type}")
+        # Exact search using L2 distance. IndexIDMap2 provides stable explicit
+        # IDs and vector removal, both of which the metadata layer requires.
+        base_index = faiss.IndexFlatL2(self.dimension)
+        self.index = faiss.IndexIDMap2(base_index)
+        logger.info("Created IndexFlatL2 wrapped in IndexIDMap2 (exact search with removal support)")
 
     def add_vectors(
         self,

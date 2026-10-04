@@ -53,6 +53,7 @@ dist-ssr/
 .pytest_cache/
 .coverage
 htmlcov/
+pytest-results/
 *.cover
 .hypothesis/
 
@@ -70,6 +71,10 @@ backend/data/cache/faiss.index
 backend/data/cache/metadata.json
 data/cache/faiss.index
 data/cache/metadata.json
+
+# Generated benchmark runs (keep curated threshold_evaluation.json)
+benchmarks/results/benchmark_results_*.json
+benchmarks/results/latest_benchmark.json
 
 # Docker
 docker-compose.override.yml

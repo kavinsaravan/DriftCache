@@ -89,6 +89,13 @@ class CachedResponse(BaseModel):
         self.last_accessed = datetime.utcnow()
 
 
+class CacheStoreResult(BaseModel):
+    """Identifiers created when a response is stored in the cache."""
+
+    cache_id: str
+    vector_id: int
+
+
 class CacheDecisionResult(BaseModel):
     """
     Result of cache decision
@@ -133,19 +140,6 @@ class CacheRequest(BaseModel):
     tenant_id: str = "default"
     user_id: Optional[str] = None
     config: Optional[CacheConfig] = None
-
-
-class CacheStoreRequest(BaseModel):
-    """Request to store in cache"""
-    prompt_text: str
-    system_prompt: Optional[str] = None
-    response_text: str
-    model_name: str
-    embedding_vector: List[float]
-    tenant_id: str = "default"
-    user_id: Optional[str] = None
-    ttl_seconds: Optional[int] = None
-    request_params: Optional[Dict[str, Any]] = None
 
 
 class CacheStats(BaseModel):

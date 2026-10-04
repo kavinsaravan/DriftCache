@@ -1,0 +1,68 @@
+{
+  "timestamp": "2026-10-04T03:56:22.398420",
+  "total_pairs": 140,
+  "total_positive_pairs": 70,
+  "total_negative_pairs": 70,
+  "thresholds": [
+    {
+      "threshold": 0.85,
+      "precision": 0.975,
+      "recall": 0.5571,
+      "f1_score": 0.7091,
+      "false_hit_rate": 0.025,
+      "false_miss_rate": 0.4429,
+      "true_positives": 39,
+      "false_positives": 1,
+      "true_negatives": 69,
+      "false_negatives": 31,
+      "cache_hits": 40,
+      "total_positive_pairs": 70,
+      "total_negative_pairs": 70
+    },
+    {
+      "threshold": 0.9,
+      "precision": 1.0,
+      "recall": 0.3143,
+      "f1_score": 0.4783,
+      "false_hit_rate": 0.0,
+      "false_miss_rate": 0.6857,
+      "true_positives": 22,
+      "false_positives": 0,
+      "true_negatives": 70,
+      "false_negatives": 48,
+      "cache_hits": 22,
+      "total_positive_pairs": 70,
+      "total_negative_pairs": 70
+    },
+    {
+      "threshold": 0.92,
+      "precision": 1.0,
+      "recall": 0.2,
+      "f1_score": 0.3333,
+      "false_hit_rate": 0.0,
+      "false_miss_rate": 0.8,
+      "true_positives": 14,
+      "false_positives": 0,
+      "true_negatives": 70,
+      "false_negatives": 56,
+      "cache_hits": 14,
+      "total_positive_pairs": 70,
+      "total_negative_pairs": 70
+    },
+    {
+      "threshold": 0.95,
+      "precision": 1.0,
+      "recall": 0.0571,
+      "f1_score": 0.1081,
+      "false_hit_rate": 0.0,
+      "false_miss_rate": 0.9429,
+      "true_positives": 4,
+      "false_positives": 0,
+      "true_negatives": 70,
+      "false_negatives": 66,
+      "cache_hits": 4,
+      "total_positive_pairs": 70,
+      "total_negative_pairs": 70
+    }
+  ]
+}
