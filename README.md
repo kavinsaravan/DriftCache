@@ -34,17 +34,17 @@ DriftCache/
 ├── backend/
 │   ├── app/
 │   │   ├── api/
-│   │   │   ├── endpoints/           # API route handlers
-│   │   │   │   ├── chat.py         # Chat completions (OpenAI-compatible)
-│   │   │   │   ├── metrics.py      # Cache metrics & analytics
-│   │   │   │   ├── training.py     # Fine-tuning pipeline
-│   │   │   │   ├── supervisor.py   # Optimization orchestration
-│   │   │   │   ├── drift.py        # Drift detection
-│   │   │   │   ├── evaluation.py   # Cache quality evaluation
-│   │   │   │   ├── vectorstore.py  # FAISS index management
-│   │   │   │   └── models.py       # Model listing
-│   │   │   └── routes.py           # Route registration
-│   │   ├── agents/                  # Automated optimization agents
+│   │   │   ├── endpoints/           
+│   │   │   │   ├── chat.py         
+│   │   │   │   ├── metrics.py      
+│   │   │   │   ├── training.py     
+│   │   │   │   ├── supervisor.py   
+│   │   │   │   ├── drift.py        
+│   │   │   │   ├── evaluation.py   
+│   │   │   │   ├── vectorstore.py  
+│   │   │   │   └── models.py       
+│   │   │   └── routes.py           
+│   │   ├── agents/                  
 │   │   │   ├── threshold_optimizer.py
 │   │   │   ├── index_rebuilder.py
 │   │   │   └── supervisor.py
