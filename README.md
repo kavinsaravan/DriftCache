@@ -2,7 +2,7 @@
 
 **Semantic Caching Platform for LLM Systems**
 
-DriftCache is an OpenAI-compatible API proxy that caches semantically similar LLM responses using sentence transformers and FAISS vector search. It reduces repeated API calls by recognizing paraphrased queries, while monitoring cache quality and semantic drift over time.
+DriftCache is an OpenAI-compatible API proxy that caches semantically similar LLM requests using sentence transformers and FAISS vector search. It reduces repeated API calls by recognizing paraphrased queries, while monitoring cache quality and semantic drift over time.
 
 ## Key Features
 
