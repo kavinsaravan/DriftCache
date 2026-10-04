@@ -10,8 +10,27 @@ DriftCache is an OpenAI-compatible API proxy that caches semantically similar LL
 - **OpenAI-Compatible Proxy** - Drop-in replacement for existing `/v1/chat/completions` integrations
 - **Dual Storage Architecture** - Redis for fast retrieval + PostgreSQL for analytics and persistence
 - **Drift Detection** - Statistical monitoring (KS-test, Wasserstein distance) to detect query distribution changes
-- **Fine-Tuning Pipeline** - PyTorch-based contrastive learning to adapt embeddings to domain-specific queries
+- **Fine-Tuning Pipeline** *(Experimental)* - PyTorch-based contrastive learning to adapt embeddings to domain-specific queries
 - **Threshold Optimization** - Automated search over candidate similarity thresholds with multi-objective scoring
+
+## Performance Metrics
+
+Real evaluation results from labeled datasets (140 test pairs: semantic duplicates + hard negatives):
+
+| Similarity Threshold | Precision | Recall | F1 Score | False Hit Rate | Use Case |
+|---------------------|-----------|--------|----------|----------------|----------|
+| **0.85** (Balanced) | **97.5%** | **55.7%** | **70.9%** | **2.5%** | Production default - high safety with good savings |
+| **0.90** (Conservative) | **100%** | **31.4%** | **47.8%** | **0%** | Maximum safety - zero wrong answers |
+| 0.92 | 100% | 20.0% | 33.3% | 0% | Ultra-conservative |
+| 0.95 | 100% | 5.7% | 10.8% | 0% | Near-exact match only |
+
+**Key Insights:**
+- **Precision**: Accuracy of cache hits (% of cached responses that are correct)
+- **Recall**: Coverage (% of semantically similar queries successfully cached)
+- **False Hit Rate**: Critical safety metric (% of cache hits that serve wrong answers)
+- **Trade-off**: Higher thresholds = safer but fewer savings; lower thresholds = more savings but higher risk
+
+At the default 0.85 threshold: **97.5% precision** means only 1 in 40 cache hits is questionable, while capturing over half of reusable queries.
 
 ## Technology Stack
 
@@ -372,12 +391,12 @@ POST /v1/chat/completions          # OpenAI-compatible chat
 GET  /v1/models                    # List models
 ```
 
-**Fine-Tuning:**
+**Fine-Tuning (Experimental):**
 ```bash
 POST /training/collect-data        # Collect training pairs from cache
 POST /training/jobs                # Start fine-tuning job
 GET  /training/jobs/{job_id}       # Monitor training progress
-POST /models/{version_id}/deploy   # Deploy model with A/B testing
+POST /models/{version_id}/deploy   # Deploy fine-tuned model (requires manual integration)
 GET  /training/stats               # Training statistics
 ```
 

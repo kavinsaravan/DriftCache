@@ -110,7 +110,7 @@ class Settings(BaseSettings):
         """Get absolute path to FAISS index file"""
         from pathlib import Path
         # Find project root (backend/app/core/config.py -> DriftCache/)
-        # parent: core -> app -> backend -> DriftCache (3 parent calls)
+        # parent: core -> app -> backend -> DriftCache (4 parent calls)
         project_root = Path(__file__).parent.parent.parent.parent
         storage_dir = project_root / self.INDEX_STORAGE_DIR
         storage_dir.mkdir(parents=True, exist_ok=True)
@@ -120,6 +120,7 @@ class Settings(BaseSettings):
         """Get absolute path to metadata file"""
         from pathlib import Path
         # Find project root (backend/app/core/config.py -> DriftCache/)
+        # parent: core -> app -> backend -> DriftCache (4 parent calls)
         project_root = Path(__file__).parent.parent.parent.parent
         storage_dir = project_root / self.INDEX_STORAGE_DIR
         storage_dir.mkdir(parents=True, exist_ok=True)

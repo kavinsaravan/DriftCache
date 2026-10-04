@@ -36,6 +36,7 @@ class StreamedResponse:
     finish_reason: Optional[str] = None
     created: int = field(default_factory=lambda: int(time.time()))
     chunks_received: int = 0
+    output_tokens: int = 0  # Estimated token count
 
     def add_chunk(self, delta: DeltaMessage):
         """Add a chunk to the collected response"""
@@ -44,6 +45,12 @@ class StreamedResponse:
         if delta.content:
             self.content += delta.content
             self.chunks_received += 1
+
+    def estimate_tokens(self) -> int:
+        """Estimate total tokens in the response (rough approximation)"""
+        # Rough estimate: ~4 characters per token
+        self.output_tokens = len(self.content) // 4
+        return self.output_tokens
 
 
 class SSEFormatter:
