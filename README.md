@@ -10,7 +10,7 @@ DriftCache is an OpenAI-compatible API proxy that caches semantically similar LL
 - **OpenAI-Compatible Proxy** - Drop-in replacement for existing `/v1/chat/completions` integrations
 - **Dual Storage Architecture** - Redis for fast retrieval + PostgreSQL for analytics and persistence
 - **Drift Detection** - Statistical monitoring (KS-test, Wasserstein distance) to detect query distribution changes
-- **Fine-Tuning Pipeline** *(Experimental)* - PyTorch-based contrastive learning to adapt embeddings to domain-specific queries
+- **Fine-Tuning Pipeline** - PyTorch-based contrastive learning to adapt embeddings to domain-specific queries
 - **Threshold Optimization** - Automated search over candidate similarity thresholds with multi-objective scoring
 
 ## Technology Stack
