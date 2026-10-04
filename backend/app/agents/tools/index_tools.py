@@ -72,9 +72,8 @@ class IndexStatusTool(BaseTool):
             last_rebuild_dt = None
             days_since_rebuild = None
 
-            # Construct index path (same as in search.py)
-            base_dir = Path(__file__).parent.parent.parent.parent
-            index_path = str(base_dir / "data" / "cache" / "faiss.index")
+            # Get index path from centralized settings
+            index_path = settings.get_index_path()
 
             if os.path.exists(index_path):
                 mtime = os.path.getmtime(index_path)

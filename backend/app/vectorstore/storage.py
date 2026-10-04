@@ -43,11 +43,8 @@ class MetadataStore:
 
     def _default_storage_path(self) -> str:
         """Get default storage path"""
-        # Store in project directory
-        base_dir = Path(__file__).parent.parent.parent.parent
-        storage_dir = base_dir / "data" / "cache"
-        storage_dir.mkdir(parents=True, exist_ok=True)
-        return str(storage_dir / "metadata.json")
+        from app.core.config import settings
+        return settings.get_metadata_path()
 
     def add(self, metadata: VectorMetadata) -> None:
         """

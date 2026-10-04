@@ -264,15 +264,30 @@ class FAISSIndex:
                 f"({loaded_index.ntotal} vectors)"
             )
 
-            # Wrap in IndexIDMap2
-            self.index = faiss.IndexIDMap2(loaded_index)
+            # IndexIDMap2 requires an empty index, so we reconstruct vectors
+            if loaded_index.ntotal > 0:
+                # Extract all vectors from old index
+                vectors = loaded_index.reconstruct_n(0, loaded_index.ntotal)
 
-            # For old indices, ntotal is safe since IDs were sequential
-            self._next_id = loaded_index.ntotal
+                # Create new IndexIDMap2 with empty base index
+                base_index = faiss.IndexFlatL2(self.dimension)
+                self.index = faiss.IndexIDMap2(base_index)
+
+                # Add vectors with sequential IDs (0, 1, 2, ...)
+                ids = np.arange(loaded_index.ntotal, dtype=np.int64)
+                self.index.add_with_ids(vectors, ids)
+
+                # Set next_id for future additions
+                self._next_id = loaded_index.ntotal
+            else:
+                # Empty index, just wrap it
+                base_index = faiss.IndexFlatL2(self.dimension)
+                self.index = faiss.IndexIDMap2(base_index)
+                self._next_id = 0
 
             # Save migrated index immediately
             self.save(path)
-            logger.info(f"Migrated and saved index as IndexIDMap2")
+            logger.info(f"Migrated and saved index as IndexIDMap2 ({self.index.ntotal} vectors)")
 
     def get_stats(self) -> dict:
         """

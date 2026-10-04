@@ -97,9 +97,33 @@ class Settings(BaseSettings):
     # Vector Search
     VECTOR_INDEX_TYPE: str = Field(default="FLAT")  # FLAT, IVF, HNSW
 
+    # Storage Paths (relative to project root)
+    INDEX_STORAGE_DIR: str = Field(default="data/cache")
+    FAISS_INDEX_FILENAME: str = Field(default="faiss.index")
+    METADATA_FILENAME: str = Field(default="metadata.json")
+
     # Autonomous Optimization
     DRIFT_DETECTION_ENABLED: bool = Field(default=True)
     OPTIMIZATION_INTERVAL_SECONDS: int = Field(default=300)  # 5 minutes
+
+    def get_index_path(self) -> str:
+        """Get absolute path to FAISS index file"""
+        from pathlib import Path
+        # Find project root (backend/app/core/config.py -> DriftCache/)
+        # parent: core -> app -> backend -> DriftCache (3 parent calls)
+        project_root = Path(__file__).parent.parent.parent.parent
+        storage_dir = project_root / self.INDEX_STORAGE_DIR
+        storage_dir.mkdir(parents=True, exist_ok=True)
+        return str(storage_dir / self.FAISS_INDEX_FILENAME)
+
+    def get_metadata_path(self) -> str:
+        """Get absolute path to metadata file"""
+        from pathlib import Path
+        # Find project root (backend/app/core/config.py -> DriftCache/)
+        project_root = Path(__file__).parent.parent.parent.parent
+        storage_dir = project_root / self.INDEX_STORAGE_DIR
+        storage_dir.mkdir(parents=True, exist_ok=True)
+        return str(storage_dir / self.METADATA_FILENAME)
 
     class Config:
         env_file = ".env"

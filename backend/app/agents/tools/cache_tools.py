@@ -212,6 +212,12 @@ class CacheInvalidationTool(BaseTool):
                         faiss_index.remove_vectors(np.array([vector_id_to_remove], dtype=np.int64))
                         removed_from_faiss = True
                         logger.info(f"Removed vector_id={vector_id_to_remove} from FAISS")
+
+                        # Save FAISS index to persist the removal
+                        from app.vectorstore.search import get_search_service
+                        search_service = get_search_service()
+                        search_service.save_index()
+                        logger.info("Saved FAISS index after removal")
                     except Exception as e:
                         logger.error(f"Failed to remove from FAISS: {e}")
 
@@ -225,12 +231,18 @@ class CacheInvalidationTool(BaseTool):
             except Exception as e:
                 logger.error(f"Failed to remove from metadata/FAISS: {e}")
 
+            # Determine overall status based on what was actually removed
+            any_removed = removed_from_redis or removed_from_metadata or removed_from_faiss
+            status = "completed" if any_removed else "not_found"
+            action = "invalidated" if any_removed else "nothing_to_remove"
+            message = f"Invalidated cache entry {cache_id}" if any_removed else f"No entry found for {cache_id}"
+
             return {
-                "status": "completed",
+                "status": status,
                 "cache_id": cache_id,
                 "reason": reason,
-                "action": "invalidated",
-                "message": f"Invalidated cache entry {cache_id}",
+                "action": action,
+                "message": message,
                 "details": {
                     "removed_from_redis": removed_from_redis,
                     "removed_from_metadata": removed_from_metadata,

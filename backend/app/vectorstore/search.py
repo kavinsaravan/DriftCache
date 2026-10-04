@@ -383,13 +383,9 @@ class SemanticSearchService:
         Args:
             index_path: Optional custom path for FAISS index
         """
-        # Default paths
+        # Default path from settings
         if index_path is None:
-            from pathlib import Path
-            base_dir = Path(__file__).parent.parent.parent.parent
-            storage_dir = base_dir / "data" / "cache"
-            storage_dir.mkdir(parents=True, exist_ok=True)
-            index_path = str(storage_dir / "faiss.index")
+            index_path = settings.get_index_path()
 
         # Save FAISS index
         self.faiss_index.save(index_path)
@@ -406,11 +402,9 @@ class SemanticSearchService:
         Args:
             index_path: Optional custom path for FAISS index
         """
-        # Default path
+        # Default path from settings
         if index_path is None:
-            from pathlib import Path
-            base_dir = Path(__file__).parent.parent.parent.parent
-            index_path = str(base_dir / "data" / "cache" / "faiss.index")
+            index_path = settings.get_index_path()
 
         # Load FAISS index
         try:
