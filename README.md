@@ -13,25 +13,6 @@ DriftCache is an OpenAI-compatible API proxy that caches semantically similar LL
 - **Fine-Tuning Pipeline** *(Experimental)* - PyTorch-based contrastive learning to adapt embeddings to domain-specific queries
 - **Threshold Optimization** - Automated search over candidate similarity thresholds with multi-objective scoring
 
-## Performance Metrics
-
-Evaluation results on 140 labeled test pairs (semantic duplicates + hard negatives):
-
-| Similarity Threshold | Precision | Recall | F1 Score | Use Case |
-|---------------------|-----------|--------|----------|----------|
-| **0.85** (Balanced) | **97.5%** | **55.7%** | **70.9%** | Production default - high safety with good coverage |
-| **0.90** (Conservative) | **100%** | **31.4%** | **47.8%** | Maximum safety - zero wrong answers |
-| 0.92 | 100% | 20.0% | 33.3% | Ultra-conservative |
-| 0.95 | 100% | 5.7% | 10.8% | Near-exact match only |
-
-**Key Insights:**
-- **Precision**: Accuracy of cache hits (% of cached responses that are correct)
-- **Recall**: Coverage (% of matching pairs successfully cached at this threshold)
-- **Trade-off**: Higher thresholds = safer but less coverage; lower thresholds = more coverage but higher risk
-- **Testing method**: Pair-wise similarity on labeled data (not full cache simulation)
-
-At 0.85, precision of 97.5% means 1 questionable hit out of 40 on this test set.
-
 ## Technology Stack
 
 | Component | Technology |
@@ -487,3 +468,23 @@ All state transitions managed by LangGraph with full audit trail stored in Postg
 - Compares recent vs. reference embedding distributions using SciPy
 - Metrics: centroid shift (cosine distance), variance shift, KS-test p-value, Wasserstein distance
 - Triggers optimization when drift severity reaches threshold
+
+
+## Performance Metrics
+
+Evaluation results on 140 labeled test pairs (semantic duplicates + hard negatives):
+
+| Similarity Threshold | Precision | Recall | F1 Score | Use Case |
+|---------------------|-----------|--------|----------|----------|
+| **0.85** (Balanced) | **97.5%** | **55.7%** | **70.9%** | Production default - high safety with good coverage |
+| **0.90** (Conservative) | **100%** | **31.4%** | **47.8%** | Maximum safety - zero wrong answers |
+| 0.92 | 100% | 20.0% | 33.3% | Ultra-conservative |
+| 0.95 | 100% | 5.7% | 10.8% | Near-exact match only |
+
+**Key Insights:**
+- **Precision**: Accuracy of cache hits (% of cached responses that are correct)
+- **Recall**: Coverage (% of matching pairs successfully cached at this threshold)
+- **Trade-off**: Higher thresholds = safer but less coverage; lower thresholds = more coverage but higher risk
+- **Testing method**: Pair-wise similarity on labeled data (not full cache simulation)
+
+At 0.85, precision of 97.5% means 1 questionable hit out of 40 on this test set.
