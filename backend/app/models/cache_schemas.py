@@ -135,19 +135,6 @@ class CacheRequest(BaseModel):
     config: Optional[CacheConfig] = None
 
 
-class CacheStoreRequest(BaseModel):
-    """Request to store in cache"""
-    prompt_text: str
-    system_prompt: Optional[str] = None
-    response_text: str
-    model_name: str
-    embedding_vector: List[float]
-    tenant_id: str = "default"
-    user_id: Optional[str] = None
-    ttl_seconds: Optional[int] = None
-    request_params: Optional[Dict[str, Any]] = None
-
-
 class CacheStats(BaseModel):
     """Cache statistics"""
     total_requests: int = 0

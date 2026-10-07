@@ -30,16 +30,7 @@ Fine-tune the embedding model on domain-specific data to improve:
            │
            ▼
 ┌─────────────────────────────────────┐
-│  3. Evaluation                      │
-│  ModelEvaluator                     │
-│  • Precision@K, Recall@K            │
-│  • MRR, NDCG                        │
-│  • Latency benchmarking             │
-└──────────┬──────────────────────────┘
-           │
-           ▼
-┌─────────────────────────────────────┐
-│  4. Deployment                      │
+│  3. Deployment                      │
 │  Model Versioning & A/B Testing     │
 │  • HuggingFace Hub integration      │
 │  • Gradual rollout                  │
@@ -292,7 +283,6 @@ app/training/
 ├── __init__.py                 # Module initialization
 ├── data_generator.py           # Training data collection
 ├── trainer.py                  # PyTorch training pipeline
-├── evaluator.py                # Model evaluation metrics
 └── README.md                   # This file
 
 app/models/
