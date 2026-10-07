@@ -1,14 +1,14 @@
-"""
-FAISS-based vector search engine for semantic similarity
+"""FAISS-based vector search engine for semantic similarity."""
 
-Includes autonomous index rebuild infrastructure
-"""
-from app.vectorstore.index_health import IndexHealthMonitor
-from app.vectorstore.index_manager import IndexManager
-from app.vectorstore.rebuild import IndexRebuilder
+from app.vectorstore.faiss_index import FAISSIndex, get_faiss_index
+from app.vectorstore.search import SemanticSearchService, get_search_service
+from app.vectorstore.storage import MetadataStore, get_metadata_store
 
 __all__ = [
-    "IndexHealthMonitor",
-    "IndexManager",
-    "IndexRebuilder",
+    "FAISSIndex",
+    "MetadataStore",
+    "SemanticSearchService",
+    "get_faiss_index",
+    "get_metadata_store",
+    "get_search_service",
 ]

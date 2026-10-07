@@ -70,7 +70,7 @@ class DriftCacheBenchmark:
     
     def __init__(self, api_base_url: str = "http://localhost:8000"):
         self.api_base_url = api_base_url
-        self.datasets_dir = Path(__file__).parent / "datasets"
+        self.datasets_dir = Path(__file__).parent.parent / "datasets"
         self.results_dir = Path(__file__).parent / "results"
         self.results_dir.mkdir(exist_ok=True)
         
@@ -117,7 +117,7 @@ class DriftCacheBenchmark:
     def run_exact_repeats_test(self) -> Dict[str, Any]:
         """Test 1: Exact repeats - should have very high cache hit rate"""
         print("\n=== Test 1: Exact Repeats ===")
-        dataset = self.load_dataset("easy_duplicates.json")
+        dataset = self.load_dataset("exact_repeats.json")
         
         results = []
         for prompt_config in dataset["prompts"]:

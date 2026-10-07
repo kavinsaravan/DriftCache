@@ -8,7 +8,7 @@ from langchain.tools import BaseTool
 from pydantic import BaseModel, Field
 import logging
 from datetime import datetime
-from app.database.session import SessionLocal
+from app.database.session import get_db_manager
 from app.services.threshold_config import get_active_threshold, set_active_threshold
 
 logger = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ class GetThresholdTool(BaseTool):
         try:
             logger.info(f"Getting current threshold for tenant_id={tenant_id}")
 
-            db = SessionLocal()
+            db = get_db_manager().get_session()
             try:
                 current_threshold = get_active_threshold(db, tenant_id=tenant_id)
 
@@ -123,7 +123,7 @@ class UpdateThresholdTool(BaseTool):
                     "status": "failed"
                 }
 
-            db = SessionLocal()
+            db = get_db_manager().get_session()
             try:
                 # Get current threshold
                 old_threshold = get_active_threshold(db, tenant_id=tenant_id)
@@ -132,10 +132,10 @@ class UpdateThresholdTool(BaseTool):
                 direction = "increase" if new_threshold > old_threshold else "decrease"
 
                 # Load evaluation dataset and compute metrics at both thresholds
-                from app.evaluation.dataset_loader import get_cached_evaluation_dataset
+                from app.evaluation.dataset_loader import load_threshold_evaluation_pairs
                 from app.optimization.threshold_search import ThresholdSearcher
 
-                eval_dataset = get_cached_evaluation_dataset()
+                eval_dataset = load_threshold_evaluation_pairs()
                 searcher = ThresholdSearcher()
 
                 # Evaluate at old threshold

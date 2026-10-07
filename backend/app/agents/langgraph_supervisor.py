@@ -15,12 +15,12 @@ from langchain.tools import BaseTool
 from app.agents.policies.remediation_policy import RemediationPolicy
 from app.agents.reports.agent_report import AgentReportFormatter
 from app.agents.threshold_optimizer import ThresholdOptimizerAgent
-from app.agents.index_rebuild_agent import IndexRebuildAgent
+from app.services.index_maintenance import IndexMaintenanceService
 from app.agents.tools.drift_tools import DriftAnalysisTool
 from app.agents.tools.cache_tools import CacheQualityTool
 from app.agents.tools.metrics_tools import MetricsSummaryTool
 from app.models.supervisor_run import SupervisorRun
-from app.database.session import get_db_manager, SessionLocal
+from app.database.session import get_db_manager
 from app.services.threshold_config import get_active_threshold
 
 logger = logging.getLogger(__name__)
@@ -86,7 +86,7 @@ class LangGraphSupervisor:
 
         # Initialize agents
         self.threshold_optimizer = ThresholdOptimizerAgent()
-        self.index_rebuilder = IndexRebuildAgent(dry_run=dry_run)
+        self.index_maintenance = IndexMaintenanceService()
 
         # Initialize tools
         self.drift_tool = DriftAnalysisTool()
@@ -162,7 +162,7 @@ class LangGraphSupervisor:
         tenant_id = state.get("tenant_id") or "default"
 
         # Get current threshold from database
-        db = SessionLocal()
+        db = get_db_manager().get_session()
         try:
             current_threshold = get_active_threshold(db, tenant_id=tenant_id)
         finally:
@@ -241,8 +241,8 @@ class LangGraphSupervisor:
         # Execute the action
         if action["agent"] == "threshold_optimizer":
             # Load real evaluation dataset from labeled prompts
-            from app.evaluation.dataset_loader import get_cached_evaluation_dataset
-            eval_dataset = get_cached_evaluation_dataset()
+            from app.evaluation.dataset_loader import load_threshold_evaluation_pairs
+            eval_dataset = load_threshold_evaluation_pairs()
 
             logger.info(f"[{run_id}] Loaded {len(eval_dataset)} evaluation pairs for threshold optimization")
 
@@ -264,11 +264,9 @@ class LangGraphSupervisor:
             }
 
         elif action["agent"] == "index_rebuilder":
-            result = self.index_rebuilder.evaluate_and_rebuild(
-                drift_severity=state["system_state"].get("drift_severity"),
-                threshold_optimization_failed=True,
-                trigger_source="supervisor",
-                tenant_id=state.get("tenant_id")
+            result = self.index_maintenance.rebuild(
+                dry_run=self.dry_run,
+                tenant_id=state.get("tenant_id"),
             )
 
             action_result = {
@@ -276,7 +274,10 @@ class LangGraphSupervisor:
                 "action": "rebuild_index",
                 "reason": action["reason"],
                 "result": result,
-                "result_summary": f"Index rebuild: {result.get('decision')}"
+                "result_summary": (
+                    f"Index rebuild: {result.get('old_vector_count')} -> "
+                    f"{result.get('new_vector_count')} vectors"
+                )
             }
 
         else:
@@ -489,15 +490,12 @@ class LangGraphSupervisor:
             Ratio of expired vectors to total vectors
         """
         try:
-            from app.vectorstore.storage import get_metadata_store
-            metadata_store = get_metadata_store()
-            ratio = metadata_store.get_stale_vector_ratio()
+            ratio = self.index_maintenance.get_stats()["stale_vector_ratio"]
             logger.debug(f"Computed stale_vector_ratio: {ratio:.3f}")
             return ratio
         except Exception as e:
             logger.error(f"Failed to compute stale_vector_ratio: {e}")
-            # Return conservative estimate on error
-            return 0.15
+            return 0.0
 
     def run_remediation_workflow(
         self,

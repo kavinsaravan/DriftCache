@@ -46,8 +46,9 @@ DriftCache/
 │   │   │   └── routes.py           
 │   │   ├── agents/                  
 │   │   │   ├── threshold_optimizer.py
-│   │   │   ├── index_rebuild_agent.py
 │   │   │   └── langgraph_supervisor.py
+│   │   ├── services/
+│   │   │   └── index_maintenance.py
 │   │   ├── providers/
 │   │   │   ├── anthropic_provider.py
 │   │   │   ├── openai_provider.py
@@ -116,7 +117,6 @@ DriftCache/
 ├── benchmarks/
 │   ├── semantic_cache_benchmark.py  
 │   ├── load_test.py                 
-│   ├── datasets/                    
 │   └── results/                     
 ├── scripts/
 │   ├── populate_demo_data.py        
@@ -126,7 +126,7 @@ DriftCache/
 │       ├── run_demo.py             
 │       ├── generate_drift.py       
 │       ├── seed_cache.py          
-│       └── prompts/               
+├── datasets/                      # Canonical benchmark and demo fixtures
 ├── docker/                          
 ├── data/cache/                      
 ├── docker-compose.yml
@@ -451,7 +451,7 @@ Built with **LangGraph StateGraph** for stateful workflow orchestration:
 1. **load_system_state** - Query drift, quality, and metrics tools (LangChain BaseTool)
 2. **diagnose** - Classify system into 8 health categories (healthy, low precision, high drift, stale index, etc.)
 3. **recommend** - Map diagnosis to remediation actions using policy rules
-4. **execute_action** - Run specialized agents (ThresholdOptimizer, IndexRebuilder)
+4. **execute_action** - Optimize the threshold or run live index maintenance
 5. **validate_action** - Check if metrics improved (precision, recall, false hit rate)
 6. **Conditional routing** - Continue with more actions or finalize based on validation
 

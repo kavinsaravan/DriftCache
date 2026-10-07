@@ -3,7 +3,7 @@
 Threshold Evaluation Script
 
 Evaluates cache quality metrics (precision, recall, F1) at different thresholds
-using labeled test pairs from benchmarks/datasets/
+using labeled test pairs from datasets/
 
 Usage:
     python3 evaluate_thresholds.py
@@ -21,7 +21,7 @@ from datetime import datetime
 # Add backend to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
 
-from app.evaluation.dataset_loader import load_evaluation_dataset
+from app.evaluation.dataset_loader import load_threshold_evaluation_pairs
 
 
 def evaluate_threshold(evaluation_pairs, threshold):
@@ -70,7 +70,7 @@ def evaluate_threshold(evaluation_pairs, threshold):
 
 def main():
     print("Loading labeled evaluation datasets...")
-    evaluation_pairs = load_evaluation_dataset()
+    evaluation_pairs = load_threshold_evaluation_pairs()
 
     print(f"Loaded {len(evaluation_pairs)} evaluation pairs\n")
 

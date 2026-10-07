@@ -203,18 +203,18 @@ python demo/generate_drift.py rebuild
 
 ## Demo Prompts
 
-### prompts/semantic_duplicates.json
+### ../../datasets/semantic_duplicates.json
 5 topics × 4 variations = 20 prompts
 - Redis, Docker, Microservices, REST API, Kubernetes
 - Tests semantic matching accuracy
 
-### prompts/drift_prompts.json
+### ../../datasets/drift_prompts.json
 - Baseline: 10 software engineering prompts
 - Drift: 10 healthcare/legal/finance prompts
 - Recovery: 10 software prompts
 - Tests drift detection sensitivity
 
-### prompts/threshold_scenarios.json
+### ../../datasets/threshold_scenarios.json
 - Clear matches: Should match at any threshold
 - Moderate similarity: Matches at 0.85, maybe not 0.95
 - Low similarity: Should NOT match (precision test)

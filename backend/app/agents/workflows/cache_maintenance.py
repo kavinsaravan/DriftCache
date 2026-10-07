@@ -13,7 +13,7 @@ from app.agents.tools.drift_tools import DriftAnalysisTool, DriftStatusTool
 from app.agents.tools.cache_tools import CacheQualityTool
 from app.agents.tools.metrics_tools import MetricsSummaryTool, LatencyMetricsTool
 from app.agents.tools.threshold_tools import GetThresholdTool, UpdateThresholdTool
-from app.agents.tools.index_tools import IndexStatusTool, TriggerIndexRebuildTool
+from app.services.index_maintenance import IndexMaintenanceService
 from app.models.agent_action import AgentAction
 from app.database.session import get_db_manager
 
@@ -36,8 +36,7 @@ class CacheMaintenanceWorkflow:
         self.latency_tool = LatencyMetricsTool()
         self.get_threshold_tool = GetThresholdTool()
         self.update_threshold_tool = UpdateThresholdTool()
-        self.index_status_tool = IndexStatusTool()
-        self.index_rebuild_tool = TriggerIndexRebuildTool()
+        self.index_maintenance = IndexMaintenanceService()
 
     def create_initial_state(self, trigger_type: str = "manual", tenant_id: str = None) -> AgentState:
         """Create initial workflow state"""
@@ -75,9 +74,9 @@ class CacheMaintenanceWorkflow:
                 state.current_threshold = 0.90
 
             # Get index status
-            index_result = self.index_status_tool._run(tenant_id=state.tenant_id)
-            if index_result.get("status") == "success":
-                state.index_status = index_result
+            state.index_status = self.index_maintenance.get_stats(
+                tenant_id=state.tenant_id
+            )
 
             # Get latency metrics
             latency_result = self.latency_tool._run(period="24h", tenant_id=state.tenant_id)
@@ -293,14 +292,12 @@ class CacheMaintenanceWorkflow:
                 state.action_result = result
 
             elif state.decision == ActionDecision.SCHEDULE_INDEX_REBUILD:
-                result = self.index_rebuild_tool._run(
-                    reason=state.decision_reason,
-                    priority="normal",
-                    dry_run=True,  #  Simulation mode
+                result = self.index_maintenance.rebuild(
+                    dry_run=True,
                     tenant_id=state.tenant_id
                 )
 
-                state.action_taken = "index_rebuild_scheduled"
+                state.action_taken = "index_rebuild_previewed"
                 state.action_result = result
 
             logger.info(f"[{state.workflow_id}] Action executed: {state.action_taken}")
@@ -326,18 +323,15 @@ class CacheMaintenanceWorkflow:
                 state.validation_summary = "No validation needed"
                 state.validation_result = {"status": "skipped"}
 
-            elif state.action_result and state.action_result.get("status") == "simulated":
-                #  Use simulation estimates
-                estimated_impact = state.action_result.get("estimated_impact", {})
-
-                state.validation_passed = True  # Simulation always "passes"
+            elif state.action_result and state.action_result.get("status") == "preview":
+                state.validation_passed = state.action_result.get("validation_passed", False)
                 state.validation_summary = (
-                    f"Simulated impact: {estimated_impact.get('precision_change', 'N/A')} precision, "
-                    f"{estimated_impact.get('recall_change', 'N/A')} recall"
+                    f"Rebuild preview: {state.action_result.get('old_vector_count', 0)} -> "
+                    f"{state.action_result.get('new_vector_count', 0)} vectors"
                 )
                 state.validation_result = {
-                    "status": "simulated",
-                    "estimated_impact": estimated_impact
+                    "status": "preview",
+                    "vectors_removed": state.action_result.get("vectors_removed", 0),
                 }
 
             else:

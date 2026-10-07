@@ -17,7 +17,7 @@ class CacheSeeder:
     
     def __init__(self, api_base_url: str = "http://localhost:8000"):
         self.api_base_url = api_base_url
-        self.prompts_dir = Path(__file__).parent / "prompts"
+        self.prompts_dir = Path(__file__).parents[2] / "datasets"
     
     def send_request(self, prompt: str, model: str = "gpt-4") -> Dict[str, Any]:
         """Send request to DriftCache"""
@@ -83,9 +83,9 @@ class CacheSeeder:
         with open(self.prompts_dir / "semantic_duplicates.json") as f:
             data = json.load(f)
         
-        for pair in data["prompt_pairs"]:
+        for pair in data["prompt_groups"]:
             topic = pair["topic"]
-            original = pair["original"]
+            original = pair["prompts"][0]
             
             print(f"\nTopic: {topic}")
             print(f"  Original: {original}")

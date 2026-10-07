@@ -22,7 +22,7 @@ class DemoRunner:
     
     def __init__(self, api_base_url: str = "http://localhost:8000"):
         self.api_base_url = api_base_url
-        self.prompts_dir = Path(__file__).parent / "prompts"
+        self.prompts_dir = Path(__file__).parents[2] / "datasets"
     
     def print_header(self, title: str):
         """Print formatted header"""
@@ -84,10 +84,10 @@ class DemoRunner:
         with open(self.prompts_dir / "semantic_duplicates.json") as f:
             data = json.load(f)
         
-        # Demo with Redis example
-        redis_pair = data["prompt_pairs"][0]  # Redis example
-        original = redis_pair["original"]
-        variations = redis_pair["variations"]
+        # Demo with the first canonical semantic-equivalence group
+        prompt_group = data["prompt_groups"][0]
+        original = prompt_group["prompts"][0]
+        variations = prompt_group["prompts"][1:]
         
         self.print_step(1, "Send Original Question")
         print(f"\n  Prompt: {Fore.WHITE}\"{original}\"{Style.RESET_ALL}")

@@ -1,145 +1,77 @@
-"""
-Dataset Loader for Threshold Optimization
+"""Load labeled prompt groups for similarity-threshold evaluation."""
 
-Loads labeled datasets and computes similarities for threshold evaluation.
-"""
 import json
 import logging
 from pathlib import Path
-from typing import List, Dict, Any, Tuple
-import numpy as np
+from typing import Any, Dict, List, Optional
 
-from app.embeddings.service import get_embedding_service
+from app.embeddings.service import EmbeddingService, get_embedding_service
 from app.embeddings.utils import cosine_similarity, list_to_vector
 
 logger = logging.getLogger(__name__)
+DATASETS_DIR = Path(__file__).parents[3] / "datasets"
 
 
-def load_evaluation_dataset(
-    dataset_paths: List[str] = None,
-    min_pairs_per_type: int = 50
+def load_threshold_evaluation_pairs(
+    dataset_paths: Optional[List[str]] = None,
+    embedding_service: Optional[EmbeddingService] = None,
 ) -> List[Dict[str, Any]]:
-    """
-    Load and compute evaluation dataset from labeled prompt pairs
+    """Load canonical labeled groups and compute pairwise similarities.
 
-    Args:
-        dataset_paths: Paths to dataset JSON files. Defaults to built-in datasets.
-        min_pairs_per_type: Minimum number of positive/negative pairs to generate
-
-    Returns:
-        List of {similarity: float, should_cache: bool} dicts
+    The function intentionally does not cache results: callers receive values
+    computed with the currently configured embedding model.
     """
-    # Default to built-in datasets
-    if dataset_paths is None:
-        # Path is: backend/app/evaluation/dataset_loader.py
-        # We need: benchmarks/datasets/ (3 levels up from backend/)
-        base_path = Path(__file__).parents[3] / "benchmarks" / "datasets"
-        dataset_paths = [
-            str(base_path / "semantic_duplicates.json"),
-            str(base_path / "hard_negatives.json"),
+    paths = (
+        [Path(path) for path in dataset_paths]
+        if dataset_paths
+        else [
+            DATASETS_DIR / "semantic_duplicates.json",
+            DATASETS_DIR / "hard_negatives.json",
         ]
-
-    logger.info(f"Loading evaluation datasets from {len(dataset_paths)} files")
-
-    # Load all datasets
-    all_groups = []
-    for path in dataset_paths:
-        try:
-            with open(path, 'r') as f:
-                data = json.load(f)
-                for group in data.get("prompt_groups", []):
-                    all_groups.append({
-                        "prompts": group["prompts"],
-                        "should_match": group["expected_behavior"] == "should_match"
-                    })
-        except FileNotFoundError:
-            logger.error(f"Dataset file not found: {path} (check if benchmarks/ folder is deployed)")
-            continue
-        except Exception as e:
-            logger.error(f"Error loading dataset {path}: {e}")
-            continue
-
-    if not all_groups:
-        raise ValueError(
-            "Failed to load any evaluation datasets. "
-            "Ensure benchmarks/datasets/ folder exists and contains semantic_duplicates.json and hard_negatives.json. "
-            "Cannot run threshold optimization with empty dataset."
-        )
-
-    logger.info(f"Loaded {len(all_groups)} prompt groups")
-
-    # Generate prompt pairs and compute similarities
-    embedding_service = get_embedding_service()
-    evaluation_pairs = []
-
-    positive_pairs = 0
-    negative_pairs = 0
-
-    for group in all_groups:
-        prompts = group["prompts"]
-        should_match = group["should_match"]
-
-        # Generate pairs within this group
-        for i in range(len(prompts)):
-            for j in range(i + 1, min(i + 3, len(prompts))):  # Limit pairs per group
-                # Compute embeddings
-                try:
-                    emb1 = embedding_service.embed_text(prompts[i])
-                    emb2 = embedding_service.embed_text(prompts[j])
-
-                    # Compute similarity
-                    vec1 = list_to_vector(emb1.vector)
-                    vec2 = list_to_vector(emb2.vector)
-                    similarity = float(cosine_similarity(vec1, vec2))
-
-                    evaluation_pairs.append({
-                        "similarity": similarity,
-                        "should_cache": should_match,
-                        "prompt1": prompts[i],
-                        "prompt2": prompts[j],
-                    })
-
-                    if should_match:
-                        positive_pairs += 1
-                    else:
-                        negative_pairs += 1
-
-                except Exception as e:
-                    logger.error(f"Error computing similarity: {e}")
-                    continue
-
-    logger.info(
-        f"Generated {len(evaluation_pairs)} evaluation pairs: "
-        f"{positive_pairs} positive (should match), "
-        f"{negative_pairs} negative (should not match)"
     )
 
-    # Log some statistics
-    if evaluation_pairs:
-        similarities = [p["similarity"] for p in evaluation_pairs]
-        positive_sims = [p["similarity"] for p in evaluation_pairs if p["should_cache"]]
-        negative_sims = [p["similarity"] for p in evaluation_pairs if not p["should_cache"]]
+    groups = []
+    for path in paths:
+        try:
+            with path.open() as file:
+                data = json.load(file)
+        except FileNotFoundError as exc:
+            raise FileNotFoundError(f"Evaluation dataset not found: {path}") from exc
+        for group in data.get("prompt_groups", []):
+            groups.append(
+                {
+                    "prompts": group["prompts"],
+                    "should_cache": group["expected_behavior"] == "should_match",
+                }
+            )
 
-        logger.info(f"Similarity distribution:")
-        logger.info(f"  All pairs: min={min(similarities):.3f}, max={max(similarities):.3f}, mean={np.mean(similarities):.3f}")
-        if positive_sims:
-            logger.info(f"  Positive pairs: min={min(positive_sims):.3f}, max={max(positive_sims):.3f}, mean={np.mean(positive_sims):.3f}")
-        if negative_sims:
-            logger.info(f"  Negative pairs: min={min(negative_sims):.3f}, max={max(negative_sims):.3f}, mean={np.mean(negative_sims):.3f}")
+    if not groups:
+        raise ValueError(
+            "No labeled prompt groups were found in the evaluation datasets"
+        )
 
-    return evaluation_pairs
+    service = embedding_service or get_embedding_service()
+    pairs: List[Dict[str, Any]] = []
+    for group in groups:
+        prompts = group["prompts"]
+        for first in range(len(prompts)):
+            for second in range(first + 1, min(first + 3, len(prompts))):
+                embedding_a = service.embed_text(prompts[first])
+                embedding_b = service.embed_text(prompts[second])
+                similarity = float(
+                    cosine_similarity(
+                        list_to_vector(embedding_a.vector),
+                        list_to_vector(embedding_b.vector),
+                    )
+                )
+                pairs.append(
+                    {
+                        "similarity": similarity,
+                        "should_cache": group["should_cache"],
+                        "prompt1": prompts[first],
+                        "prompt2": prompts[second],
+                    }
+                )
 
-
-def get_cached_evaluation_dataset(cache_ttl_seconds: int = 300) -> List[Dict[str, Any]]:
-    """
-    Get evaluation dataset with caching to avoid recomputing embeddings
-
-    Args:
-        cache_ttl_seconds: How long to cache the dataset
-
-    Returns:
-        Cached or freshly computed evaluation dataset
-    """
-    # TODO: Implement caching using Redis or a global variable with timestamp
-    # For now, just return fresh data
-    return load_evaluation_dataset()
+    logger.info("Loaded %d threshold evaluation pairs", len(pairs))
+    return pairs

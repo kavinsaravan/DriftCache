@@ -19,7 +19,7 @@ class DriftGenerator:
     
     def __init__(self, api_base_url: str = "http://localhost:8000"):
         self.api_base_url = api_base_url
-        self.prompts_dir = Path(__file__).parent / "prompts"
+        self.prompts_dir = Path(__file__).parents[2] / "datasets"
     
     def send_request(self, prompt: str) -> Dict[str, Any]:
         """Send request to DriftCache"""
