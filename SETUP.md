@@ -24,7 +24,7 @@ ANTHROPIC_API_KEY=your_actual_api_key_here
 ### 2. Start Services
 
 ```bash
-docker-compose up -d
+make up
 ```
 
 This will start:
@@ -38,6 +38,23 @@ This will start:
 - **Frontend Dashboard**: http://localhost:3000
 - **API Documentation**: http://localhost:8000/docs
 - **API Health Check**: http://localhost:8000/health
+
+## Development Commands
+
+The root Makefile is the supported command interface. Run `make help` to list
+all commands. It does not install packages, start containers, or read secrets
+as a side effect of testing. Dependency installation is an explicit step:
+
+```bash
+make install
+make test
+make smoke
+make demo DEMO_SCENARIO=semantic
+make benchmark
+```
+
+Set `API_BASE_URL` to target another deployment and export
+`DRIFTCACHE_API_KEY` when authentication is enabled.
 
 ## Local Development Setup
 
@@ -90,19 +107,21 @@ alembic upgrade head
 
 ```bash
 # Send a query
-curl -X POST http://localhost:8000/api/v1/query \
+curl -X POST http://localhost:8000/api/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "What are the benefits of solar energy?",
-    "model": "claude-3-5-sonnet-20241022"
+    "messages": [{"role": "user", "content": "What are the benefits of solar energy?"}],
+    "model": "claude-3-5-sonnet-20241022",
+    "stream": false
   }'
 
 # Send a semantically similar query (should hit cache)
-curl -X POST http://localhost:8000/api/v1/query \
+curl -X POST http://localhost:8000/api/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "Can you explain advantages of solar power?",
-    "model": "claude-3-5-sonnet-20241022"
+    "messages": [{"role": "user", "content": "Can you explain advantages of solar power?"}],
+    "model": "claude-3-5-sonnet-20241022",
+    "stream": false
   }'
 ```
 
@@ -130,4 +149,4 @@ Key settings in `.env`:
 ### Cache not working
 - Check Redis connection: `redis-cli ping`
 - Verify embedding model downloaded
-- Check logs: `docker-compose logs backend`
+- Check logs: `docker compose logs backend`

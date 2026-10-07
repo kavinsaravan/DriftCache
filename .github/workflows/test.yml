@@ -42,8 +42,7 @@ jobs:
         DATABASE_URL: sqlite:///./test.db
         REQUIRE_API_KEY: false
       run: |
-        cd backend
-        python -m pytest tests/ -v -s --tb=short -m "not integration"
+        make test
 
     - name: Upload test results
       if: always()

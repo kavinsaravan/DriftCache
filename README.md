@@ -7,7 +7,7 @@ DriftCache is an OpenAI-compatible API proxy that caches semantically similar LL
 ## Key Features
 
 - **Semantic Caching** - Sentence Transformers + FAISS to recognize paraphrased queries beyond exact matches
-- **OpenAI-Compatible Proxy** - Drop-in replacement for existing `/v1/chat/completions` integrations
+- **OpenAI-Compatible Proxy** - Drop-in replacement at `/api/v1/chat/completions`
 - **Dual Storage Architecture** - Redis for fast retrieval + PostgreSQL for analytics and persistence
 - **Drift Detection** - Statistical monitoring (KS-test, Wasserstein distance) to detect query distribution changes
 - **Fine-Tuning Pipeline** - PyTorch-based contrastive learning to adapt embeddings to domain-specific queries
@@ -119,14 +119,9 @@ DriftCache/
 │   ├── load_test.py                 
 │   └── results/                     
 ├── scripts/
-│   ├── populate_demo_data.py        
-│   ├── simple_benchmark_simulation.py
-│   ├── smoke_test.sh                
-│   └── demo/                       
-│       ├── run_demo.py             
-│       ├── generate_drift.py       
-│       ├── seed_cache.py          
+│   └── demo.py                    # Maintained demo and smoke runner
 ├── datasets/                      # Canonical benchmark and demo fixtures
+├── Makefile                       # Development command interface
 ├── docker/                          
 ├── data/cache/                      
 ├── docker-compose.yml
@@ -227,11 +222,24 @@ cp .env.example .env
 # - OPENAI_API_KEY or ANTHROPIC_API_KEY: For LLM provider
 
 # Start with Docker (recommended)
-docker compose up --build
+make up
 
 # Open dashboard
 open http://localhost
 ```
+
+The root Makefile is the supported development interface:
+
+```bash
+make help
+make test
+make smoke
+make demo DEMO_SCENARIO=semantic
+make benchmark
+```
+
+Use `API_BASE_URL=https://your-host` for a remote API and export
+`DRIFTCACHE_API_KEY` when authentication is enabled.
 
 **Security Note:** The dashboard uses `METRICS_API_KEY` (read-only) instead of the main `API_KEY`. This prevents write operations but still exposes:
 - Cached prompts via `/metrics/top-cached-prompts`
@@ -252,7 +260,7 @@ from openai import OpenAI
 
 # Just point to DriftCache instead of OpenAI
 client = OpenAI(
-    base_url="https://driftcache-api-production.up.railway.app/api/v1",
+    base_url="http://localhost:8000/api/v1",
     api_key="your-api-key-here"  # Set API_KEY in backend .env
 )
 
@@ -273,7 +281,7 @@ print(f"Cache hit: {response.cache_hit}")  # Check if response was cached
 import OpenAI from 'openai';
 
 const client = new OpenAI({
-  baseURL: "https://driftcache-api-production.up.railway.app/api/v1",
+  baseURL: "http://localhost:8000/api/v1",
   apiKey: "dummy"
 });
 
@@ -291,7 +299,7 @@ console.log(`Cache hit: ${response.cache_hit}`);
 #### cURL
 
 ```bash
-curl https://driftcache-api-production.up.railway.app/api/v1/chat/completions \
+curl http://localhost:8000/api/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "claude-sonnet-5",
@@ -309,7 +317,7 @@ curl https://driftcache-api-production.up.railway.app/api/v1/chat/completions \
 from langchain_openai import ChatOpenAI
 
 llm = ChatOpenAI(
-    base_url="https://driftcache-api-production.up.railway.app/api/v1",
+    base_url="http://localhost:8000/api/v1",
     model="claude-sonnet-5",
     api_key="your-api-key-here"
 )
@@ -324,7 +332,7 @@ print(response.content)
 from llama_index.llms.openai import OpenAI
 
 llm = OpenAI(
-    api_base="https://driftcache-api-production.up.railway.app/api/v1",
+    api_base="http://localhost:8000/api/v1",
     model="claude-sonnet-5",
     api_key="your-api-key-here"
 )
@@ -366,26 +374,26 @@ Request → Embed prompt → FAISS search → Similarity ≥ threshold?
 
 **Core Caching:**
 ```bash
-POST /v1/chat/completions          # OpenAI-compatible chat
-GET  /v1/models                    # List models
+POST /api/v1/chat/completions      # OpenAI-compatible chat
+GET  /api/v1/models                # List models
 ```
 
 **Fine-Tuning (Experimental):**
 ```bash
-POST /training/collect-data        # Collect training pairs from cache
-POST /training/jobs                # Start fine-tuning job
-GET  /training/jobs/{job_id}       # Monitor training progress
-POST /models/{version_id}/deploy   # Deploy fine-tuned model (requires manual integration)
-GET  /training/stats               # Training statistics
+POST /api/v1/training/collect-data        # Collect training pairs from cache
+POST /api/v1/training/jobs                # Start fine-tuning job
+GET  /api/v1/training/jobs/{job_id}       # Monitor training progress
+POST /api/v1/training/models/{version_id}/deploy
+GET  /api/v1/training/stats               # Training statistics
 ```
 
 **Optimization & Monitoring:**
 ```bash
-POST /supervisor/run               # Run threshold optimization workflow
-GET  /supervisor/latest            # Latest optimization results
-GET  /metrics/cache-performance    # Hit rate, latency, cost savings
-GET  /drift/status                 # Current drift severity and statistics
-GET  /benchmark/summary            # Benchmark results
+POST /api/v1/supervisor/run        # Run threshold optimization workflow
+GET  /api/v1/supervisor/runs       # Optimization history
+GET  /api/v1/metrics/summary       # Hit rate, latency, cost savings
+GET  /api/v1/drift/latest          # Latest drift alert
+GET  /api/v1/benchmark/summary     # Benchmark results
 ```
 
 ## Fine-Tuning Pipeline

@@ -142,9 +142,8 @@ GET /benchmark/health
 docker compose up -d
 
 # Run benchmarks from host
-pip install requests aiohttp
-python benchmarks/semantic_cache_benchmark.py
-python benchmarks/load_test.py
+make benchmark
+make load-test
 
 # Or run inside backend container
 docker exec -it driftcache-backend python /app/../benchmarks/semantic_cache_benchmark.py

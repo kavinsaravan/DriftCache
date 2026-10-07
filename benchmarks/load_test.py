@@ -9,10 +9,12 @@ Tests system behavior under concurrent load:
 - System stability
 """
 
+import argparse
 import json
+import os
 import time
 import asyncio
-import aiohttp
+import httpx
 from typing import List, Dict, Any
 from dataclasses import dataclass, asdict
 from datetime import datetime
@@ -54,19 +56,24 @@ class LoadTestResult:
 class LoadTester:
     """Load testing for DriftCache"""
     
-    def __init__(self, api_base_url: str = "http://localhost:8000"):
+    def __init__(
+        self,
+        api_base_url: str = "http://localhost:8000",
+        api_key: str | None = None,
+    ):
         self.api_base_url = api_base_url
+        self.headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         self.results_dir = Path(__file__).parent / "results"
         self.results_dir.mkdir(exist_ok=True)
     
     async def send_async_request(
         self, 
-        session: aiohttp.ClientSession, 
+        session: httpx.AsyncClient,
         prompt: str,
         request_id: int
     ) -> Dict[str, Any]:
         """Send async request to DriftCache"""
-        url = f"{self.api_base_url}/v1/chat/completions"
+        url = f"{self.api_base_url}/api/v1/chat/completions"
         payload = {
             "model": "gpt-4",
             "messages": [{"role": "user", "content": prompt}],
@@ -75,26 +82,25 @@ class LoadTester:
         
         start_time = time.time()
         try:
-            async with session.post(url, json=payload) as response:
-                latency_ms = (time.time() - start_time) * 1000
-                
-                if response.status == 200:
-                    data = await response.json()
-                    return {
-                        "request_id": request_id,
-                        "success": True,
-                        "latency_ms": latency_ms,
-                        "cache_hit": data.get("cache_hit", False),
-                        "status_code": response.status
-                    }
-                else:
-                    return {
-                        "request_id": request_id,
-                        "success": False,
-                        "latency_ms": latency_ms,
-                        "status_code": response.status,
-                        "error": f"HTTP {response.status}"
-                    }
+            response = await session.post(url, json=payload)
+            latency_ms = (time.time() - start_time) * 1000
+
+            if response.status_code == 200:
+                data = response.json()
+                return {
+                    "request_id": request_id,
+                    "success": True,
+                    "latency_ms": latency_ms,
+                    "cache_hit": data.get("cache_hit", False),
+                    "status_code": response.status_code,
+                }
+            return {
+                "request_id": request_id,
+                "success": False,
+                "latency_ms": latency_ms,
+                "status_code": response.status_code,
+                "error": f"HTTP {response.status_code}",
+            }
         except Exception as e:
             latency_ms = (time.time() - start_time) * 1000
             return {
@@ -113,10 +119,14 @@ class LoadTester:
         print(f"\nSending {len(prompts)} requests with {concurrent_requests} concurrent connections...")
         
         results = []
-        connector = aiohttp.TCPConnector(limit=concurrent_requests)
-        timeout = aiohttp.ClientTimeout(total=60)
-        
-        async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
+        limits = httpx.Limits(max_connections=concurrent_requests)
+        timeout = httpx.Timeout(60)
+
+        async with httpx.AsyncClient(
+            limits=limits,
+            timeout=timeout,
+            headers=self.headers,
+        ) as session:
             tasks = [
                 self.send_async_request(session, prompt, idx)
                 for idx, prompt in enumerate(prompts)
@@ -174,7 +184,8 @@ class LoadTester:
     def analyze_results(
         self,
         results: List[Dict[str, Any]],
-        duration: float
+        duration: float,
+        concurrent_connections: int,
     ) -> LoadTestResult:
         """Analyze load test results"""
         total_requests = len(results)
@@ -216,7 +227,7 @@ class LoadTester:
             error_rate=error_rate,
             test_duration_seconds=duration,
             requests_per_second=rps,
-            avg_concurrent_requests=20,  # From test config
+            avg_concurrent_requests=concurrent_connections,
             avg_latency_ms=avg_latency,
             p50_latency_ms=p50_latency,
             p95_latency_ms=p95_latency,
@@ -298,7 +309,7 @@ class LoadTester:
         duration = time.time() - start_time
         
         # Analyze and report
-        metrics = self.analyze_results(results, duration)
+        metrics = self.analyze_results(results, duration, concurrent_connections)
         self.print_report(metrics)
         self.save_results(metrics)
         
@@ -307,10 +318,20 @@ class LoadTester:
 
 async def main():
     """Main entry point"""
-    tester = LoadTester()
-    
-    # Run load test with 1000 requests, 20 concurrent connections
-    await tester.run_load_test(num_requests=1000, concurrent_connections=20)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--api-url", default="http://localhost:8000")
+    parser.add_argument(
+        "--api-key",
+        default=os.getenv("DRIFTCACHE_API_KEY") or os.getenv("API_KEY"),
+    )
+    parser.add_argument("--requests", type=int, default=1000)
+    parser.add_argument("--concurrency", type=int, default=20)
+    args = parser.parse_args()
+    tester = LoadTester(args.api_url.rstrip("/"), args.api_key)
+    await tester.run_load_test(
+        num_requests=args.requests,
+        concurrent_connections=args.concurrency,
+    )
 
 
 if __name__ == "__main__":
