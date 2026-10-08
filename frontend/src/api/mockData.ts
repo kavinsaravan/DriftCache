@@ -4,22 +4,12 @@ export const mockMetricsSummary = {
   cache_misses: 320,
   cache_hit_rate: 0.68,
   estimated_cost_saved_usd: 11.72,
-  average_latency_ms: 9.2,
-  total_provider_calls: 320,
   calls_avoided: 680
 };
 
-export const mockLatencyStats = {
-  cache_latency: {
-    average_ms: 9.2,
-    min_ms: 5.1,
-    max_ms: 18.3
-  },
-  provider_latency: {
-    average_ms: 1320.0,
-    min_ms: 850.0,
-    max_ms: 2100.0
-  },
+export const mockDashboardLatency = {
+  cache_average_ms: 9.2,
+  provider_average_ms: 1320.0,
   speedup_factor: 143.5
 };
 
@@ -76,23 +66,8 @@ export const mockTopCachedPrompts = [
   }
 ];
 
-export const mockProviderUsage = {
-  openai: {
-    total_calls: 320,
-    total_tokens: 102000,
-    total_cost_usd: 11.72,
-    models: {
-      "gpt-4o-mini": {
-        calls: 320,
-        tokens: 102000,
-        cost_usd: 11.72
-      }
-    }
-  }
-};
-
 // Generate mock time series data
-const generateMockTimeSeries = (metric: 'hit_rate' | 'latency' | 'requests') => {
+const generateMockTimeSeries = (metric: 'hit_rate' | 'requests') => {
   const now = new Date();
   const data = [];
 
@@ -102,8 +77,6 @@ const generateMockTimeSeries = (metric: 'hit_rate' | 'latency' | 'requests') => 
 
     if (metric === 'hit_rate') {
       value = 0.65 + Math.random() * 0.1; // 65-75%
-    } else if (metric === 'latency') {
-      value = 8 + Math.random() * 4; // 8-12ms
     } else {
       value = Math.floor(40 + Math.random() * 20); // 40-60 requests
     }
@@ -118,15 +91,12 @@ const generateMockTimeSeries = (metric: 'hit_rate' | 'latency' | 'requests') => 
 };
 
 export const mockTimeSeriesHitRate = generateMockTimeSeries('hit_rate');
-export const mockTimeSeriesLatency = generateMockTimeSeries('latency');
 export const mockTimeSeriesRequests = generateMockTimeSeries('requests');
 
 export const mockDashboardData = {
   period: "24h",
   generated_at: new Date().toISOString(),
   summary: mockMetricsSummary,
-  latency: mockLatencyStats,
-  similarity_distribution: mockSimilarityDistribution,
-  top_cached_prompts: mockTopCachedPrompts,
-  provider_usage: mockProviderUsage
+  latency: mockDashboardLatency,
+  similarity_distribution: mockSimilarityDistribution
 };

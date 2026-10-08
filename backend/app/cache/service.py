@@ -12,6 +12,7 @@ import logging
 from typing import Optional, List
 from datetime import datetime, timedelta
 import uuid
+import numpy as np
 
 from app.cache.decision import get_decision_engine, CacheDecisionEngine
 from app.cache.redis_store import get_redis_store, RedisStore
@@ -68,12 +69,6 @@ class CacheService:
         # In-memory threshold cache to avoid DB query on every request
         self._threshold_cache: dict = {}  # {tenant_id: (threshold, timestamp)}
         self._threshold_cache_ttl = 30  # seconds
-
-        # Track writes to save index periodically instead of on every write
-        self._writes_since_last_save = 0
-        self._save_index_every_n_writes = 10  # Save every 10 writes
-        self._last_index_save_time = datetime.utcnow()
-        self._save_index_every_seconds = 60  # Or save every 60 seconds
 
         logger.info("CacheService initialized (Redis mode)")
 
@@ -142,6 +137,12 @@ class CacheService:
         """
         start_time = datetime.utcnow()
 
+        # A deployment in another worker publishes an atomic marker after the
+        # shared index is ready. Refresh lazily before serving the next request.
+        from fastapi.concurrency import run_in_threadpool
+        from app.training.deployment import refresh_deployed_model
+        await run_in_threadpool(refresh_deployed_model)
+
         # Ensure Redis store is initialized
         if self.redis_store is None:
             self.redis_store = await get_redis_store()
@@ -158,8 +159,6 @@ class CacheService:
             threshold = self._get_cached_threshold(tenant_id=tenant_id)
 
         # Generate embedding (wrapped in threadpool to avoid blocking async event loop)
-        from fastapi.concurrency import run_in_threadpool
-
         embedding_text = cache_key.to_embedding_text(
             include_system=config.include_system_prompt if config else True
         )
@@ -206,7 +205,7 @@ class CacheService:
                 if not cached_response:
                     # The response is already in the metadata, use it directly
                     cached_response = CachedResponse(
-                        cache_id=cache_entry.prompt_id,
+                        cache_id=self._persistent_cache_id(cache_entry),
                         prompt_text=cache_entry.prompt_text,
                         response_text=cache_entry.response_text,
                         model_name=cache_entry.metadata.model_name,
@@ -221,7 +220,7 @@ class CacheService:
             else:
                 # Old entry without cache_key_hash, fall back to metadata
                 cached_response = CachedResponse(
-                    cache_id=cache_entry.prompt_id,
+                    cache_id=self._persistent_cache_id(cache_entry),
                     prompt_text=cache_entry.prompt_text,
                     response_text=cache_entry.response_text,
                     model_name=cache_entry.metadata.model_name,
@@ -243,6 +242,7 @@ class CacheService:
             tenant_id=tenant_id,
             threshold=threshold
         )
+        decision_result.retrieval_source = retrieval_source
 
         # Calculate latency
         latency_ms = (datetime.utcnow() - start_time).total_seconds() * 1000
@@ -305,6 +305,10 @@ class CacheService:
         Returns:
             Cache and vector identifiers for the stored response
         """
+        from fastapi.concurrency import run_in_threadpool
+        from app.training.deployment import refresh_deployed_model
+        await run_in_threadpool(refresh_deployed_model)
+
         # Ensure Redis store is initialized
         if self.redis_store is None:
             self.redis_store = await get_redis_store()
@@ -341,49 +345,70 @@ class CacheService:
             request_params=request_params or {}
         )
 
-        # Store in Redis (online serving layer)
-        # IMPORTANT: Use cache_key hash that includes tenant, model, system, history, and prompt
-        # This prevents key collisions when different conversations end with the same question
         cache_key_hash = cache_key.to_cache_key_hash()
-        await self.redis_store.set_cached_response(
-            cache_id=cache_key_hash,
-            response=cached_response,
-            ttl_seconds=ttl
-        )
 
-        # Add to FAISS vector index
+        # Persist the searchable entry before exposing it through Redis. This
+        # closes the window where a process crash could leave a hot response
+        # with no durable FAISS vector.
         vector_id = self.search_service.add_to_index(
             embedding=embedding,
             response_text=response_text,
             model_name=model_name,
+            cache_id=cache_id,
             tenant_id=tenant_id,
             system_prompt=cache_key.system_prompt,
             conversation_history=cache_key.conversation_history,
-            cache_key_hash=cache_key_hash
+            cache_key_hash=cache_key_hash,
         )
-
-        # Persist FAISS index to disk periodically (not on every write)
-        self._writes_since_last_save += 1
-        now = datetime.utcnow()
-        time_since_save = (now - self._last_index_save_time).total_seconds()
-
-        should_save = (
-            self._writes_since_last_save >= self._save_index_every_n_writes or
-            time_since_save >= self._save_index_every_seconds
-        )
-
-        if should_save:
+        try:
             self.search_service.save_index()
-            self._writes_since_last_save = 0
-            self._last_index_save_time = now
-            logger.info(f"Saved FAISS index after {self._writes_since_last_save} writes")
+        except Exception:
+            self.search_service.faiss_index.remove_vectors(
+                np.asarray([vector_id], dtype=np.int64)
+            )
+            self.search_service.metadata_store.delete(vector_id)
+            raise
+
+        # Use the full request-derived hash as the Redis lookup key. The value
+        # itself retains the persistent UUID used by PostgreSQL analytics.
+        await self.redis_store.set_cached_response(
+            cache_id=cache_key_hash,
+            response=cached_response,
+            ttl_seconds=ttl,
+        )
 
         logger.info(
             f"Stored response in cache: cache_id={cache_id[:8]}..., "
-            f"ttl={ttl}s, stored=[redis+faiss{'+disk' if should_save else ''}]"
+            f"ttl={ttl}s, stored=[redis+faiss+disk]"
         )
 
         return CacheStoreResult(cache_id=cache_id, vector_id=vector_id)
+
+    @staticmethod
+    def _persistent_cache_id(cache_entry) -> str:
+        """Return the database UUID, with a lookup for pre-migration metadata."""
+        if cache_entry.metadata.cache_id:
+            return cache_entry.metadata.cache_id
+
+        try:
+            from app.models.embedding_record import EmbeddingRecord
+
+            with get_db_manager().session_scope() as session:
+                record = session.query(EmbeddingRecord).filter(
+                    EmbeddingRecord.faiss_vector_id == cache_entry.vector_id
+                ).first()
+                if record:
+                    cache_entry.metadata.cache_id = record.cache_id
+                    return record.cache_id
+        except Exception:
+            logger.exception(
+                "Could not resolve persistent cache ID for vector %s",
+                cache_entry.vector_id,
+            )
+
+        # Old indexes created before persistent IDs were stored can still be
+        # served, but their historical hit counter cannot be linked.
+        return cache_entry.prompt_id
 
     def _extract_cache_key(
         self,
@@ -490,6 +515,7 @@ class CacheService:
         # Clear all stores
         await self.redis_store.clear_all()
         self.search_service.clear_index()
+        self.search_service.save_index()
 
         logger.info("Cleared all cache data (Redis + FAISS)")
 
@@ -502,7 +528,10 @@ class CacheService:
         Returns:
             Number of entries cleared
         """
-        return self.search_service.remove_expired_vectors()
+        removed = self.search_service.remove_expired_vectors()
+        if removed:
+            self.search_service.save_index()
+        return removed
 
     def save_cache(self) -> None:
         """Save FAISS index to disk"""

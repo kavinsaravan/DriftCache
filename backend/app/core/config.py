@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     # API Settings
     API_V1_PREFIX: str = "/api/v1"
     PROJECT_NAME: str = "DriftCache"
-    API_KEY: str = Field(default="", description="API key for authentication (set in production)")
+    API_KEY: str = Field(default="", description="Bootstrap administrator API key (set in production)")
     METRICS_API_KEY: str = Field(default="", description="Read-only key for metrics/dashboard (optional)")
     REQUIRE_API_KEY: bool = Field(default=True, description="Require API key for requests")
 
@@ -110,9 +110,8 @@ class Settings(BaseSettings):
     FAISS_INDEX_FILENAME: str = Field(default="faiss.index")
     METADATA_FILENAME: str = Field(default="metadata.json")
 
-    # Autonomous Optimization
+    # Drift monitoring and index maintenance
     DRIFT_DETECTION_ENABLED: bool = Field(default=True)
-    OPTIMIZATION_INTERVAL_SECONDS: int = Field(default=300)  # 5 minutes
     VECTOR_CLEANUP_INTERVAL_SECONDS: int = Field(
         default=3600,
         ge=60,

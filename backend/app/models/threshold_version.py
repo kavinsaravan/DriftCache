@@ -1,7 +1,7 @@
 """
 Threshold Version Model
 
-Tracks historical similarity thresholds for point-in-time evaluation and autonomous optimization
+Tracks historical similarity thresholds for point-in-time evaluation
 """
 from sqlalchemy import Column, String, Float, DateTime, Integer, Text, Boolean
 from sqlalchemy.sql import func
@@ -23,7 +23,7 @@ class ThresholdVersion(Base):
     This enables:
     - Point-in-time evaluation
     - A/B testing different thresholds
-    - Agent-driven threshold optimization
+    - Manual threshold comparison
     - Historical performance analysis
     """
     __tablename__ = "threshold_versions"
@@ -37,8 +37,7 @@ class ThresholdVersion(Base):
 
     # Change metadata
     reason = Column(Text, nullable=True)  # Why this threshold was chosen
-    created_by = Column(String(100), nullable=True)  # "manual", "agent:threshold_optimizer", etc.
-    optimization_run_id = Column(Integer, nullable=True)  # Link to optimization run
+    created_by = Column(String(100), nullable=True)
 
     # Quality metrics before change
     precision_before = Column(Float, nullable=True)
@@ -77,7 +76,6 @@ class ThresholdVersion(Base):
             "threshold_value": self.threshold_value,
             "reason": self.reason,
             "created_by": self.created_by,
-            "optimization_run_id": self.optimization_run_id,
             "metrics_before": {
                 "precision": self.precision_before,
                 "recall": self.recall_before,

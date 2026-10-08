@@ -33,7 +33,7 @@ class ModelVersion(Base):
     # Performance metrics
     performance_metrics = Column(JSON, default={})  # Precision, recall, latency, etc.
 
-    # A/B testing
+    # Deployment state (traffic is currently either 0% or 100%)
     is_active = Column(Boolean, default=False)  # Currently in production
     traffic_percentage = Column(Float, default=0.0)  # % of traffic routed to this model
 

@@ -29,7 +29,7 @@ class CacheDecisionReplayer:
      how many HITs would have become MISSes?"
 
     This is critical for:
-    - Threshold optimization
+    - Manual threshold selection
     - A/B testing
     - Understanding impact of config changes
     """

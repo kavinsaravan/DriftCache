@@ -177,9 +177,13 @@ async def test_cached_stream_generation():
     # Last chunk should be [DONE]
     assert chunks[-1] == "data: [DONE]\n\n"
 
-    # Middle chunks should have content
-    content_chunks = [c for c in chunks if "This" in c or "cached" in c or "response" in c]
-    assert len(content_chunks) > 0
+    content = ""
+    for chunk in chunks[1:-2]:
+        parsed = parse_sse_chunk(chunk)
+        if not parsed:
+            continue
+        content += parsed["choices"][0]["delta"].get("content", "")
+    assert content == cached_content
 
 
 def test_parse_sse_chunk():

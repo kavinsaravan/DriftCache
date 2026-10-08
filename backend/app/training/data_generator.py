@@ -1,263 +1,182 @@
-"""
-Training Data Generator
+"""Build fine-tuning pairs from labeled fixtures and observed cache matches."""
 
-Generates training pairs from cache interactions for contrastive learning.
-
-Strategies:
-1. Positive pairs: Queries with high similarity that resulted in cache hits
-2. Hard negatives: Queries with medium similarity that shouldn't match
-3. Easy negatives: Random dissimilar queries
-"""
+import json
 import logging
 import random
-from typing import List, Dict, Tuple, Optional
 from datetime import datetime, timedelta
-from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, func
+from itertools import combinations
+from pathlib import Path
+from typing import Dict, Iterable, List
 
-from app.models.cache_entry import CacheEntry
-from app.models.training_pair import TrainingPair, PairType
-from app.embeddings.service import get_embedding_service
-from app.embeddings.utils import list_to_vector
 import numpy as np
+from sqlalchemy.orm import Session
+
+from app.embeddings.service import get_embedding_service
+from app.models.cache_entry import CacheEntry
+from app.models.cache_event import CacheEvent, CacheStatus
+from app.models.request import Request
+from app.models.training_pair import PairType, TrainingPair
+
 
 logger = logging.getLogger(__name__)
+DATASETS_DIR = Path(__file__).parents[3] / "datasets"
 
 
 class TrainingDataGenerator:
-    """
-    Generates training pairs from cache interactions
-
-    This is a key component for fine-tuning the embedding model
-    using real production data.
-    """
+    """Create labeled pairs without treating model predictions as truth."""
 
     def __init__(self, db: Session):
-        """
-        Initialize data generator
-
-        Args:
-            db: Database session
-        """
         self.db = db
         self.embedding_service = get_embedding_service()
+
+    @staticmethod
+    def _pair_key(anchor: str, comparison: str, pair_type: PairType) -> tuple[str, str, str]:
+        texts = sorted((" ".join(anchor.lower().split()), " ".join(comparison.lower().split())))
+        return texts[0], texts[1], pair_type.value
+
+    @staticmethod
+    def _load_groups(filename: str) -> list[dict]:
+        with (DATASETS_DIR / filename).open() as dataset_file:
+            return json.load(dataset_file)["prompt_groups"]
+
+    def _similarities(self, text_pairs: Iterable[tuple[str, str]]) -> list[float]:
+        pairs = list(text_pairs)
+        if not pairs:
+            return []
+        unique_texts = list(dict.fromkeys(text for pair in pairs for text in pair))
+        batch = self.embedding_service.embed_batch(unique_texts)
+        vectors = {
+            text: np.asarray(embedding.vector, dtype=np.float32)
+            for text, embedding in zip(unique_texts, batch.embeddings)
+        }
+        return [float(np.dot(vectors[first], vectors[second])) for first, second in pairs]
+
+    def _observed_positive_pairs(
+        self,
+        limit: int,
+        similarity_threshold: float,
+        days_lookback: int,
+    ) -> list[TrainingPair]:
+        """Capture real matches for review, without marking them as validated."""
+        cutoff = datetime.utcnow() - timedelta(days=days_lookback)
+        rows = (
+            self.db.query(Request, CacheEntry, CacheEvent.similarity_score)
+            .join(CacheEvent, CacheEvent.request_id == Request.request_id)
+            .join(CacheEntry, CacheEntry.cache_id == CacheEvent.matched_cache_id)
+            .filter(
+                CacheEvent.cache_status == CacheStatus.HIT,
+                CacheEvent.created_at >= cutoff,
+                CacheEvent.similarity_score >= similarity_threshold,
+                Request.prompt_hash != CacheEntry.prompt_hash,
+            )
+            .order_by(CacheEvent.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+        return [
+            TrainingPair(
+                anchor_text=request.prompt_text,
+                comparison_text=entry.prompt_text,
+                pair_type=PairType.POSITIVE,
+                similarity_score=similarity,
+                anchor_cache_id=None,
+                comparison_cache_id=entry.cache_id,
+                is_validated=0,
+                quality_score=similarity,
+            )
+            for request, entry, similarity in rows
+        ]
 
     def generate_positive_pairs(
         self,
         min_pairs: int = 1000,
         similarity_threshold: float = 0.85,
-        days_lookback: int = 30
+        days_lookback: int = 30,
     ) -> List[TrainingPair]:
-        """
-        Generate positive pairs from cache hits
-
-        Strategy: Find queries that resulted in cache hits with high similarity
-
-        Args:
-            min_pairs: Minimum number of pairs to generate
-            similarity_threshold: Minimum similarity for positive pairs
-            days_lookback: Days of history to analyze
-
-        Returns:
-            List of positive training pairs
-        """
-        logger.info(f"Generating positive pairs (target: {min_pairs})")
-
-        # Get cache entries with hits from recent history
-        cutoff_date = datetime.utcnow() - timedelta(days=days_lookback)
-
-        cache_entries = self.db.query(CacheEntry).filter(
-            and_(
-                CacheEntry.cache_hits > 0,
-                CacheEntry.created_at >= cutoff_date
+        """Return curated positives plus observed matches awaiting validation."""
+        candidates: list[TrainingPair] = []
+        groups = self._load_groups("semantic_duplicates.json")
+        curated_text_pairs = [
+            pair for group in groups for pair in combinations(group["prompts"], 2)
+        ]
+        for (anchor, comparison), similarity in zip(
+            curated_text_pairs,
+            self._similarities(curated_text_pairs),
+        ):
+            candidates.append(
+                TrainingPair(
+                    anchor_text=anchor,
+                    comparison_text=comparison,
+                    pair_type=PairType.POSITIVE,
+                    similarity_score=similarity,
+                    is_validated=1,
+                    quality_score=1.0,
+                )
             )
-        ).limit(5000).all()  # Limit for performance
 
-        logger.info(f"Found {len(cache_entries)} cache entries with hits")
-
-        positive_pairs = []
-
-        # Generate pairs by finding similar cached queries
-        for i, entry1 in enumerate(cache_entries):
-            if len(positive_pairs) >= min_pairs:
-                break
-
-            # Get embedding for this entry
-            emb1 = self.embedding_service.embed_text(entry1.prompt_text)
-            vec1 = list_to_vector(emb1.vector)
-
-            # Find similar entries
-            for entry2 in cache_entries[i+1:]:
-                if len(positive_pairs) >= min_pairs:
-                    break
-
-                # Skip if same prompt
-                if entry1.prompt_hash == entry2.prompt_hash:
-                    continue
-
-                # Compute similarity
-                emb2 = self.embedding_service.embed_text(entry2.prompt_text)
-                vec2 = list_to_vector(emb2.vector)
-                similarity = float(np.dot(vec1, vec2))
-
-                # Create positive pair if similarity is high
-                if similarity >= similarity_threshold:
-                    pair = TrainingPair(
-                        anchor_text=entry1.prompt_text,
-                        comparison_text=entry2.prompt_text,
-                        pair_type=PairType.POSITIVE,
-                        similarity_score=similarity,
-                        anchor_cache_id=entry1.cache_id,
-                        comparison_cache_id=entry2.cache_id
-                    )
-                    positive_pairs.append(pair)
-
-                    logger.debug(f"Created positive pair: similarity={similarity:.3f}")
-
-        logger.info(f"Generated {len(positive_pairs)} positive pairs")
-        return positive_pairs
+        remaining = max(min_pairs - len(candidates), 0)
+        if remaining:
+            candidates.extend(
+                self._observed_positive_pairs(
+                    limit=remaining,
+                    similarity_threshold=similarity_threshold,
+                    days_lookback=days_lookback,
+                )
+            )
+        return candidates[:min_pairs]
 
     def generate_hard_negative_pairs(
         self,
         min_pairs: int = 500,
         similarity_min: float = 0.6,
         similarity_max: float = 0.84,
-        days_lookback: int = 30
+        days_lookback: int = 30,
     ) -> List[TrainingPair]:
-        """
-        Generate hard negative pairs
-
-        Strategy: Find queries with medium similarity that should NOT match
-        These are the hardest cases for the model to learn
-
-        Args:
-            min_pairs: Minimum number of pairs to generate
-            similarity_min: Minimum similarity for hard negatives
-            similarity_max: Maximum similarity for hard negatives
-            days_lookback: Days of history to analyze
-
-        Returns:
-            List of hard negative training pairs
-        """
-        logger.info(f"Generating hard negative pairs (target: {min_pairs})")
-
-        # Get cache entries from recent history
-        cutoff_date = datetime.utcnow() - timedelta(days=days_lookback)
-
-        cache_entries = self.db.query(CacheEntry).filter(
-            CacheEntry.created_at >= cutoff_date
-        ).limit(5000).all()
-
-        hard_negatives = []
-
-        # Generate pairs by finding medium similarity queries
-        for i, entry1 in enumerate(cache_entries):
-            if len(hard_negatives) >= min_pairs:
-                break
-
-            # Get embedding for this entry
-            emb1 = self.embedding_service.embed_text(entry1.prompt_text)
-            vec1 = list_to_vector(emb1.vector)
-
-            # Find medium similarity entries (hard negatives)
-            for entry2 in cache_entries[i+1:]:
-                if len(hard_negatives) >= min_pairs:
-                    break
-
-                # Skip if same prompt
-                if entry1.prompt_hash == entry2.prompt_hash:
-                    continue
-
-                # Skip if same model (we want different domains)
-                if entry1.model == entry2.model:
-                    continue
-
-                # Compute similarity
-                emb2 = self.embedding_service.embed_text(entry2.prompt_text)
-                vec2 = list_to_vector(emb2.vector)
-                similarity = float(np.dot(vec1, vec2))
-
-                # Create hard negative if similarity is in the sweet spot
-                if similarity_min <= similarity <= similarity_max:
-                    pair = TrainingPair(
-                        anchor_text=entry1.prompt_text,
-                        comparison_text=entry2.prompt_text,
+        """Return human-curated similar-looking prompts that must not match."""
+        del days_lookback
+        groups = self._load_groups("hard_negatives.json")
+        text_pairs = [
+            pair for group in groups for pair in combinations(group["prompts"], 2)
+        ]
+        candidates = []
+        for (anchor, comparison), similarity in zip(text_pairs, self._similarities(text_pairs)):
+            if similarity_min <= similarity <= similarity_max:
+                candidates.append(
+                    TrainingPair(
+                        anchor_text=anchor,
+                        comparison_text=comparison,
                         pair_type=PairType.HARD_NEGATIVE,
                         similarity_score=similarity,
-                        anchor_cache_id=entry1.cache_id,
-                        comparison_cache_id=entry2.cache_id
+                        is_validated=1,
+                        quality_score=1.0,
                     )
-                    hard_negatives.append(pair)
-
-                    logger.debug(f"Created hard negative pair: similarity={similarity:.3f}")
-
-        logger.info(f"Generated {len(hard_negatives)} hard negative pairs")
-        return hard_negatives
+                )
+        return candidates[:min_pairs]
 
     def generate_easy_negative_pairs(
         self,
         min_pairs: int = 500,
-        days_lookback: int = 30
+        days_lookback: int = 30,
     ) -> List[TrainingPair]:
-        """
-        Generate easy negative pairs
-
-        Strategy: Random pairs from different domains
-
-        Args:
-            min_pairs: Minimum number of pairs to generate
-            days_lookback: Days of history to analyze
-
-        Returns:
-            List of easy negative training pairs
-        """
-        logger.info(f"Generating easy negative pairs (target: {min_pairs})")
-
-        # Get cache entries from recent history
-        cutoff_date = datetime.utcnow() - timedelta(days=days_lookback)
-
-        cache_entries = self.db.query(CacheEntry).filter(
-            CacheEntry.created_at >= cutoff_date
-        ).all()
-
-        if len(cache_entries) < 2:
-            logger.warning("Not enough cache entries for easy negatives")
-            return []
-
-        easy_negatives = []
-
-        # Generate random pairs
-        for _ in range(min_pairs):
-            # Pick two random entries
-            entry1, entry2 = random.sample(cache_entries, 2)
-
-            # Skip if same prompt
-            if entry1.prompt_hash == entry2.prompt_hash:
-                continue
-
-            # Optionally compute similarity
-            emb1 = self.embedding_service.embed_text(entry1.prompt_text)
-            emb2 = self.embedding_service.embed_text(entry2.prompt_text)
-            vec1 = list_to_vector(emb1.vector)
-            vec2 = list_to_vector(emb2.vector)
-            similarity = float(np.dot(vec1, vec2))
-
-            # Only use if similarity is low
-            if similarity < 0.5:
-                pair = TrainingPair(
-                    anchor_text=entry1.prompt_text,
-                    comparison_text=entry2.prompt_text,
-                    pair_type=PairType.EASY_NEGATIVE,
-                    similarity_score=similarity,
-                    anchor_cache_id=entry1.cache_id,
-                    comparison_cache_id=entry2.cache_id
-                )
-                easy_negatives.append(pair)
-
-                logger.debug(f"Created easy negative pair: similarity={similarity:.3f}")
-
-        logger.info(f"Generated {len(easy_negatives)} easy negative pairs")
-        return easy_negatives
+        """Pair prompts from different curated topics and keep low-similarity examples."""
+        del days_lookback
+        groups = self._load_groups("semantic_duplicates.json")
+        representatives = [group["prompts"][0] for group in groups]
+        text_pairs = list(combinations(representatives, 2))
+        scored = list(zip(text_pairs, self._similarities(text_pairs)))
+        random.Random(42).shuffle(scored)
+        return [
+            TrainingPair(
+                anchor_text=anchor,
+                comparison_text=comparison,
+                pair_type=PairType.EASY_NEGATIVE,
+                similarity_score=similarity,
+                is_validated=1,
+                quality_score=1.0,
+            )
+            for (anchor, comparison), similarity in scored
+            if similarity < 0.5
+        ][:min_pairs]
 
     def collect_training_data(
         self,
@@ -267,66 +186,46 @@ class TrainingDataGenerator:
         positive_threshold: float = 0.85,
         hard_negative_min: float = 0.6,
         hard_negative_max: float = 0.84,
-        days_lookback: int = 30
+        days_lookback: int = 30,
     ) -> Dict[str, int]:
-        """
-        Collect all training data and save to database
-
-        This is the main method to call for data collection
-
-        Args:
-            min_positive_pairs: Target number of positive pairs
-            min_hard_negatives: Target number of hard negative pairs
-            min_easy_negatives: Target number of easy negative pairs
-            positive_threshold: Similarity threshold for positives
-            hard_negative_min: Min similarity for hard negatives
-            hard_negative_max: Max similarity for hard negatives
-            days_lookback: Days of history to analyze
-
-        Returns:
-            Dictionary with counts of generated pairs
-        """
-        logger.info("Starting training data collection")
+        """Generate unique pairs and persist only rows not already collected."""
         start_time = datetime.utcnow()
-
-        # Generate positive pairs
-        positive_pairs = self.generate_positive_pairs(
-            min_pairs=min_positive_pairs,
-            similarity_threshold=positive_threshold,
-            days_lookback=days_lookback
+        generated = (
+            self.generate_positive_pairs(min_positive_pairs, positive_threshold, days_lookback)
+            + self.generate_hard_negative_pairs(
+                min_hard_negatives,
+                hard_negative_min,
+                hard_negative_max,
+                days_lookback,
+            )
+            + self.generate_easy_negative_pairs(min_easy_negatives, days_lookback)
         )
 
-        # Generate hard negatives
-        hard_negatives = self.generate_hard_negative_pairs(
-            min_pairs=min_hard_negatives,
-            similarity_min=hard_negative_min,
-            similarity_max=hard_negative_max,
-            days_lookback=days_lookback
-        )
+        existing_keys = {
+            self._pair_key(pair.anchor_text, pair.comparison_text, pair.pair_type)
+            for pair in self.db.query(TrainingPair).all()
+        }
+        unique_new_pairs: list[TrainingPair] = []
+        for pair in generated:
+            key = self._pair_key(pair.anchor_text, pair.comparison_text, pair.pair_type)
+            if key in existing_keys:
+                continue
+            existing_keys.add(key)
+            unique_new_pairs.append(pair)
 
-        # Generate easy negatives
-        easy_negatives = self.generate_easy_negative_pairs(
-            min_pairs=min_easy_negatives,
-            days_lookback=days_lookback
-        )
-
-        # Save all pairs to database
-        all_pairs = positive_pairs + hard_negatives + easy_negatives
-
-        self.db.bulk_save_objects(all_pairs)
+        self.db.add_all(unique_new_pairs)
         self.db.commit()
 
-        end_time = datetime.utcnow()
-        duration = (end_time - start_time).total_seconds()
+        counts = {pair_type: 0 for pair_type in PairType}
+        for pair in unique_new_pairs:
+            counts[pair.pair_type] += 1
 
         result = {
-            "num_positive_pairs": len(positive_pairs),
-            "num_hard_negative_pairs": len(hard_negatives),
-            "num_easy_negative_pairs": len(easy_negatives),
-            "total_pairs": len(all_pairs),
-            "collection_time_seconds": duration
+            "num_positive_pairs": counts[PairType.POSITIVE],
+            "num_hard_negative_pairs": counts[PairType.HARD_NEGATIVE],
+            "num_easy_negative_pairs": counts[PairType.EASY_NEGATIVE],
+            "total_pairs": len(unique_new_pairs),
+            "collection_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
         }
-
-        logger.info(f"Training data collection complete: {result}")
-
+        logger.info("Training data collection complete: %s", result)
         return result

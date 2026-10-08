@@ -68,29 +68,6 @@ class MetricsService:
             tenant_id=tenant_id
         )
 
-    def get_latency_stats(
-        self,
-        period: str = "24h",
-        tenant_id: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Get latency statistics
-
-        Args:
-            period: Time period
-            tenant_id: Optional tenant filter
-
-        Returns:
-            Latency breakdown
-        """
-        since = self._parse_period(period)
-        calculator = MetricsCalculator(self.session)
-
-        return calculator.calculate_latency_breakdown(
-            since=since,
-            tenant_id=tenant_id
-        )
-
     def get_similarity_distribution(
         self,
         period: str = "24h",
@@ -143,29 +120,6 @@ class MetricsService:
             tenant_id=tenant_id
         )
 
-    def get_provider_usage(
-        self,
-        period: str = "24h",
-        tenant_id: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Get provider usage statistics
-
-        Args:
-            period: Time period
-            tenant_id: Optional tenant filter
-
-        Returns:
-            Provider usage breakdown
-        """
-        since = self._parse_period(period)
-        calculator = MetricsCalculator(self.session)
-
-        return calculator.calculate_provider_usage(
-            since=since,
-            tenant_id=tenant_id
-        )
-
     def get_time_series(
         self,
         metric: str,
@@ -177,7 +131,7 @@ class MetricsService:
         Get time series data for a metric
 
         Args:
-            metric: "hit_rate", "latency", "requests"
+            metric: "hit_rate" or "requests"
             period: Time period
             interval: Bucket size ("5m", "1h", "1d")
             tenant_id: Optional tenant filter
@@ -229,10 +183,10 @@ class MetricsService:
                 tenant_id=tenant_id
             ),
 
-            # Latency comparison
-            "latency": calculator.calculate_latency_breakdown(
+            # Compact latency comparison for the Dashboard speedup card
+            "latency": calculator.calculate_dashboard_latency(
                 since=since,
-                tenant_id=tenant_id
+                tenant_id=tenant_id,
             ),
 
             # Similarity distribution
@@ -242,18 +196,6 @@ class MetricsService:
                 bins=10
             ),
 
-            # Top prompts
-            "top_cached_prompts": calculator.calculate_top_cached_prompts(
-                limit=5,
-                since=since,
-                tenant_id=tenant_id
-            ),
-
-            # Provider usage
-            "provider_usage": calculator.calculate_provider_usage(
-                since=since,
-                tenant_id=tenant_id
-            )
         }
 
     def _parse_period(self, period: str) -> datetime:

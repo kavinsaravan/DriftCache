@@ -196,3 +196,9 @@ def get_embedding_model() -> EmbeddingModel:
         _embedding_model = EmbeddingModel()
 
     return _embedding_model
+
+
+def set_embedding_model(model: EmbeddingModel) -> None:
+    """Replace the process-wide embedding model after a validated deployment."""
+    global _embedding_model
+    _embedding_model = model

@@ -156,6 +156,13 @@ class CacheRecorder:
                 # Map CacheDecision to CacheStatus
                 cache_status = self._map_decision_to_status(decision_result.decision)
 
+                # Keep the persistent entry counter in sync with Redis and FAISS.
+                # This powers top-prompt analytics and positive-pair generation.
+                if decision_result.is_hit() and decision_result.cached_response:
+                    cache_repo.increment_entry_hits(
+                        decision_result.cached_response.cache_id
+                    )
+
                 # Create event with versioning info
                 from app.models.cache_event import CacheEvent
                 event = CacheEvent(
@@ -167,7 +174,7 @@ class CacheRecorder:
                     matched_cache_id=decision_result.cached_response.cache_id if decision_result.cached_response else None,
                     similarity_score=decision_result.similarity,
                     latency_ms=latency_ms,
-                    retrieval_source="redis" if decision_result.is_hit() else None,
+                    retrieval_source=decision_result.retrieval_source,
                     threshold_version_id=threshold_version_id,
                     # Point-in-time versioning
                     embedding_model=embedding_model,

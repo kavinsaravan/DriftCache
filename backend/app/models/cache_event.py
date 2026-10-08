@@ -32,7 +32,7 @@ class CacheEvent(Base):
     This enables:
     - Cache hit rate analysis
     - Similarity score drift detection
-    - Threshold optimization
+    - Threshold evaluation
     - Latency tracking
     - False hit investigation
     """

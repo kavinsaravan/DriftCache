@@ -69,6 +69,10 @@ class VectorMetadata(BaseModel):
     FAISS only stores vectors. We need to map vector_id -> metadata
     """
     vector_id: int = Field(..., description="FAISS vector ID")
+    cache_id: Optional[str] = Field(
+        None,
+        description="Persistent cache entry UUID",
+    )
     prompt_id: str = Field(..., description="Unique prompt identifier (hash)")
     prompt_text: str = Field(..., description="Original prompt")
     response_text: Optional[str] = Field(None, description="Cached response")
@@ -87,6 +91,7 @@ class VectorMetadata(BaseModel):
         """Convert to dictionary for storage"""
         return {
             "vector_id": self.vector_id,
+            "cache_id": self.cache_id,
             "prompt_id": self.prompt_id,
             "prompt_text": self.prompt_text,
             "response_text": self.response_text,
@@ -113,6 +118,7 @@ class VectorMetadata(BaseModel):
 
         # Provide defaults for new fields (for backward compatibility with old cache)
         data.setdefault("tenant_id", "default")
+        data.setdefault("cache_id", None)
         data.setdefault("system_prompt", None)
         data.setdefault("conversation_history", None)
         data.setdefault("cache_key_hash", None)

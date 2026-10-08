@@ -166,7 +166,7 @@ async def lifespan(app: FastAPI):
 # Initialize FastAPI app
 app = FastAPI(
     title="DriftCache API",
-    description="Adaptive Semantic Caching & Autonomous Optimization Platform for LLM Systems",
+    description="Semantic caching and quality monitoring for LLM systems",
     version="0.1.0",
     docs_url="/docs",
     redoc_url="/redoc",

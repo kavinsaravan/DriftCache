@@ -51,7 +51,7 @@ class TrainingJob(Base):
     training_time_seconds = Column(Float, nullable=True)
 
     # Evaluation metrics
-    eval_metrics = Column(JSON, default={})  # Precision, recall, MRR, etc.
+    eval_metrics = Column(JSON, default={})  # Held-out pair-classification metrics
 
     # Error handling
     error_message = Column(Text, nullable=True)

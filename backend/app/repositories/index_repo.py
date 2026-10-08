@@ -71,7 +71,8 @@ class IndexRepository:
             reason=reason,
             created_by=created_by,
             active_from=active_from,
-            active_until=None  # Currently active
+            active_until=None,
+            is_active=True,
         )
 
         self.session.add(version)
@@ -96,7 +97,8 @@ class IndexRepository:
         return self.session.query(IndexVersion).filter(
             and_(
                 IndexVersion.active_from <= now,
-                IndexVersion.active_until.is_(None)
+                IndexVersion.active_until.is_(None),
+                IndexVersion.is_active.is_(True),
             )
         ).first()
 
@@ -130,6 +132,7 @@ class IndexRepository:
         current = self.get_current()
         if current:
             current.active_until = active_until
+            current.is_active = False
             self.session.commit()
             logger.debug(f"Deactivated index version {current.id}")
 

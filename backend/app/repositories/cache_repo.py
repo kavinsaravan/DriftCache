@@ -5,7 +5,7 @@ Handles database operations for cache entries, events, and embeddings
 """
 import logging
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -98,18 +98,27 @@ class CacheRepository:
             CacheEntry.cache_id == cache_id
         ).first()
 
-    def increment_entry_hits(self, cache_id: str) -> None:
+    def increment_entry_hits(self, cache_id: str) -> bool:
         """
-        Increment cache hit counter
+        Atomically increment the persistent cache hit counter.
 
         Args:
             cache_id: Cache ID
+
+        Returns:
+            Whether an entry with that cache ID was updated
         """
-        entry = self.get_entry(cache_id)
-        if entry:
-            entry.cache_hits += 1
-            entry.last_accessed = datetime.utcnow()
-            self.session.commit()
+        updated = self.session.query(CacheEntry).filter(
+            CacheEntry.cache_id == cache_id
+        ).update(
+            {
+                CacheEntry.cache_hits: func.coalesce(CacheEntry.cache_hits, 0) + 1,
+                CacheEntry.last_accessed: datetime.now(timezone.utc),
+            },
+            synchronize_session=False,
+        )
+        self.session.commit()
+        return updated > 0
 
     # Cache Event Operations
 
