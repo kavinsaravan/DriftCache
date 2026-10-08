@@ -6,22 +6,32 @@ Provides dashboard metrics and analytics
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
 from app.metrics.service import get_metrics_service
+from app.core.auth import verify_metrics_key
+from app.services.api_keys import AuthContext
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/metrics", tags=["metrics"])
 
 
+def _tenant_scope(auth: AuthContext, requested_tenant: Optional[str]) -> Optional[str]:
+    """Admins may select a tenant; every other credential is fixed to its tenant."""
+    if auth.is_admin:
+        return requested_tenant
+    return auth.tenant_id
+
+
 @router.get("/summary")
 async def get_metrics_summary(
     period: str = Query("24h", description="Time period: 1h, 24h, 7d, 30d"),
     tenant_id: Optional[str] = Query(None, description="Optional tenant filter"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(verify_metrics_key),
 ):
     """
     Get summary metrics for dashboard
@@ -43,14 +53,15 @@ async def get_metrics_summary(
     This is the key endpoint that proves DriftCache's value!
     """
     with get_metrics_service(session=db) as service:
-        return service.get_summary(period=period, tenant_id=tenant_id)
+        return service.get_summary(period=period, tenant_id=_tenant_scope(auth, tenant_id))
 
 
 @router.get("/latency")
 async def get_latency_stats(
     period: str = Query("24h", description="Time period"),
     tenant_id: Optional[str] = Query(None, description="Optional tenant filter"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(verify_metrics_key),
 ):
     """
     Get latency statistics
@@ -60,7 +71,7 @@ async def get_latency_stats(
     Shows how much faster cache is than LLM calls
     """
     with get_metrics_service(session=db) as service:
-        return service.get_latency_stats(period=period, tenant_id=tenant_id)
+        return service.get_latency_stats(period=period, tenant_id=_tenant_scope(auth, tenant_id))
 
 
 @router.get("/similarity-distribution")
@@ -68,7 +79,8 @@ async def get_similarity_distribution(
     period: str = Query("24h", description="Time period"),
     bins: int = Query(10, ge=5, le=20, description="Number of histogram bins"),
     tenant_id: Optional[str] = Query(None, description="Optional tenant filter"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(verify_metrics_key),
 ):
     """
     Get similarity score distribution
@@ -90,7 +102,7 @@ async def get_similarity_distribution(
         return service.get_similarity_distribution(
             period=period,
             bins=bins,
-            tenant_id=tenant_id
+            tenant_id=_tenant_scope(auth, tenant_id)
         )
 
 
@@ -99,7 +111,8 @@ async def get_top_cached_prompts(
     limit: int = Query(10, ge=1, le=100, description="Maximum results"),
     period: str = Query("24h", description="Time period"),
     tenant_id: Optional[str] = Query(None, description="Optional tenant filter"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(verify_metrics_key),
 ):
     """
     Get top cached prompts by hit count
@@ -112,7 +125,7 @@ async def get_top_cached_prompts(
         return service.get_top_cached_prompts(
             limit=limit,
             period=period,
-            tenant_id=tenant_id
+            tenant_id=_tenant_scope(auth, tenant_id)
         )
 
 
@@ -120,7 +133,8 @@ async def get_top_cached_prompts(
 async def get_provider_usage(
     period: str = Query("24h", description="Time period"),
     tenant_id: Optional[str] = Query(None, description="Optional tenant filter"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(verify_metrics_key),
 ):
     """
     Get provider usage statistics
@@ -134,7 +148,7 @@ async def get_provider_usage(
     - Model-level breakdown
     """
     with get_metrics_service(session=db) as service:
-        return service.get_provider_usage(period=period, tenant_id=tenant_id)
+        return service.get_provider_usage(period=period, tenant_id=_tenant_scope(auth, tenant_id))
 
 
 @router.get("/time-series/{metric}")
@@ -143,7 +157,8 @@ async def get_time_series(
     period: str = Query("24h", description="Time period"),
     interval: str = Query("1h", description="Bucket size: 5m, 1h, 1d"),
     tenant_id: Optional[str] = Query(None, description="Optional tenant filter"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(verify_metrics_key),
 ):
     """
     Get time series data for a metric
@@ -157,16 +172,17 @@ async def get_time_series(
     """
     valid_metrics = ["hit_rate", "latency", "requests"]
     if metric not in valid_metrics:
-        return {
-            "error": f"Invalid metric. Must be one of: {', '.join(valid_metrics)}"
-        }
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid metric. Must be one of: {', '.join(valid_metrics)}",
+        )
 
     with get_metrics_service(session=db) as service:
         return service.get_time_series(
             metric=metric,
             period=period,
             interval=interval,
-            tenant_id=tenant_id
+            tenant_id=_tenant_scope(auth, tenant_id)
         )
 
 
@@ -174,7 +190,8 @@ async def get_time_series(
 async def get_dashboard_data(
     period: str = Query("24h", description="Time period"),
     tenant_id: Optional[str] = Query(None, description="Optional tenant filter"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(verify_metrics_key),
 ):
     """
     Get complete dashboard data in one call
@@ -189,11 +206,14 @@ async def get_dashboard_data(
     This reduces API calls for the frontend
     """
     with get_metrics_service(session=db) as service:
-        return service.get_dashboard_data(period=period, tenant_id=tenant_id)
+        return service.get_dashboard_data(
+            period=period,
+            tenant_id=_tenant_scope(auth, tenant_id),
+        )
 
 
 @router.get("/health")
-async def metrics_health():
+async def metrics_health(_auth: AuthContext = Depends(verify_metrics_key)):
     """Metrics service health check"""
     return {
         "status": "healthy",

@@ -102,58 +102,121 @@ class ContrastiveTrainer:
         """
         logger.info("Preparing training data from database")
 
-        # Query all training pairs
-        training_pairs = db.query(TrainingPair).all()
+        # Observed cache hits remain review candidates. Training only consumes
+        # curated or explicitly human-validated labels.
+        training_pairs = [
+            pair for pair in db.query(TrainingPair).all() if pair.is_validated == 1
+        ]
 
         if not training_pairs:
-            raise ValueError("No training pairs found in database")
+            raise ValueError("No validated training pairs found in database")
 
         logger.info(f"Loaded {len(training_pairs)} training pairs")
 
-        positive_examples: List[InputExample] = []
-        negative_examples: List[InputExample] = []
-
-        for pair in training_pairs:
-            # For positive pairs: (anchor, positive, label=1.0)
-            if pair.pair_type == PairType.POSITIVE:
-                example = InputExample(
-                    texts=[pair.anchor_text, pair.comparison_text],
-                    label=1.0  # Similar
-                )
-                positive_examples.append(example)
-
-            # For negative pairs: (anchor, negative, label=0.0)
-            # Only include negatives for losses that use explicit negative labels
-            elif pair.pair_type in [PairType.HARD_NEGATIVE, PairType.EASY_NEGATIVE]:
-                negative_examples.append(InputExample(
-                    texts=[pair.anchor_text, pair.comparison_text],
-                    label=0.0,
-                ))
-
         rng = random.Random(random_seed)
 
-        def split_examples(examples: List[InputExample]) -> tuple[List[InputExample], List[InputExample]]:
-            examples = list(examples)
-            rng.shuffle(examples)
-            if len(examples) < 2:
-                return examples, []
-            validation_count = max(1, round(len(examples) * validation_split))
-            validation_count = min(validation_count, len(examples) - 1)
-            return examples[validation_count:], examples[:validation_count]
+        # Keep equivalent prompts together. Negative edges do not form groups:
+        # joining them would connect unrelated topics into one giant component.
+        parent: Dict[str, str] = {}
 
-        positive_train, positive_validation = split_examples(positive_examples)
-        negative_train, negative_validation = split_examples(negative_examples)
+        def normalized(text: str) -> str:
+            return " ".join(text.lower().split())
+
+        def find(value: str) -> str:
+            parent.setdefault(value, value)
+            if parent[value] != value:
+                parent[value] = find(parent[value])
+            return parent[value]
+
+        def union(first: str, second: str) -> None:
+            first_root, second_root = find(first), find(second)
+            if first_root != second_root:
+                parent[second_root] = first_root
+
+        for pair in training_pairs:
+            anchor = normalized(pair.anchor_text)
+            comparison = normalized(pair.comparison_text)
+            find(anchor)
+            find(comparison)
+            if pair.pair_type == PairType.POSITIVE:
+                union(anchor, comparison)
+
+        prompt_groups: Dict[str, set[str]] = {}
+        for prompt in list(parent):
+            prompt_groups.setdefault(find(prompt), set()).add(prompt)
+
+        group_ids = list(prompt_groups)
+        positive_group_ids = {
+            find(normalized(pair.anchor_text))
+            for pair in training_pairs
+            if pair.pair_type == PairType.POSITIVE
+        }
+        if len(positive_group_ids) < 2:
+            raise ValueError(
+                "At least two disconnected positive prompt groups are required "
+                "for leakage-free training and validation"
+            )
+
+        validation_group_count = max(3, round(len(group_ids) * validation_split))
+        validation_group_count = min(validation_group_count, len(group_ids) - 1)
+        training_pairs_split: List[TrainingPair] = []
+        validation_pairs: List[TrainingPair] = []
+
+        # Try deterministic seeded assignments until both partitions contain
+        # the classes needed by training/evaluation. Negative pairs spanning
+        # the boundary are omitted rather than leaking either prompt.
+        for _ in range(200):
+            rng.shuffle(group_ids)
+            validation_ids = set(group_ids[:validation_group_count])
+            candidate_training: List[TrainingPair] = []
+            candidate_validation: List[TrainingPair] = []
+            for pair in training_pairs:
+                anchor_group = find(normalized(pair.anchor_text))
+                comparison_group = find(normalized(pair.comparison_text))
+                anchor_is_validation = anchor_group in validation_ids
+                comparison_is_validation = comparison_group in validation_ids
+                if anchor_is_validation and comparison_is_validation:
+                    candidate_validation.append(pair)
+                elif not anchor_is_validation and not comparison_is_validation:
+                    candidate_training.append(pair)
+
+            validation_types = {pair.pair_type for pair in candidate_validation}
+            has_validation_negative = bool(
+                validation_types & {PairType.HARD_NEGATIVE, PairType.EASY_NEGATIVE}
+            )
+            has_training_positive = any(
+                pair.pair_type == PairType.POSITIVE for pair in candidate_training
+            )
+            if (
+                PairType.POSITIVE in validation_types
+                and has_validation_negative
+                and has_training_positive
+            ):
+                training_pairs_split = candidate_training
+                validation_pairs = candidate_validation
+                break
+        else:
+            raise ValueError(
+                "Could not create a leakage-free split containing both validation classes"
+            )
+
+        def to_example(pair: TrainingPair) -> InputExample:
+            return InputExample(
+                texts=[pair.anchor_text, pair.comparison_text],
+                label=1.0 if pair.pair_type == PairType.POSITIVE else 0.0,
+            )
 
         if loss_function == "MultipleNegativesRankingLoss":
-            train_examples = positive_train
-            # Explicit negatives are not consumed by MNRL, so keep all of them
-            # available for an honest held-out classification evaluation.
-            negative_validation = negative_train + negative_validation
+            train_examples = [
+                to_example(pair)
+                for pair in training_pairs_split
+                if pair.pair_type == PairType.POSITIVE
+            ]
         else:
-            train_examples = positive_train + negative_train
+            train_examples = [to_example(pair) for pair in training_pairs_split]
             rng.shuffle(train_examples)
 
-        validation_examples = positive_validation + negative_validation
+        validation_examples = [to_example(pair) for pair in validation_pairs]
         rng.shuffle(validation_examples)
 
         if not train_examples:
@@ -165,6 +228,9 @@ class ContrastiveTrainer:
             raise ValueError(
                 "At least two held-out pairs are required for validation; collect more training data"
             )
+        validation_labels = {example.label for example in validation_examples}
+        if validation_labels != {0.0, 1.0}:
+            raise ValueError("Validation split must contain positive and negative pairs")
 
         logger.info(
             "Prepared %s training and %s validation examples",
@@ -429,15 +495,18 @@ class TrainingJobManager:
 
         # Count training pairs
         num_positive = self.db.query(TrainingPair).filter(
-            TrainingPair.pair_type == PairType.POSITIVE
+            TrainingPair.pair_type == PairType.POSITIVE,
+            TrainingPair.is_validated == 1,
         ).count()
 
         num_hard_neg = self.db.query(TrainingPair).filter(
-            TrainingPair.pair_type == PairType.HARD_NEGATIVE
+            TrainingPair.pair_type == PairType.HARD_NEGATIVE,
+            TrainingPair.is_validated == 1,
         ).count()
 
         num_easy_neg = self.db.query(TrainingPair).filter(
-            TrainingPair.pair_type == PairType.EASY_NEGATIVE
+            TrainingPair.pair_type == PairType.EASY_NEGATIVE,
+            TrainingPair.is_validated == 1,
         ).count()
 
         total_pairs = num_positive + num_hard_neg + num_easy_neg

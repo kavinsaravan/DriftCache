@@ -8,7 +8,7 @@ Endpoints use different auth based on their function:
 """
 from fastapi import APIRouter, Depends
 from app.api.endpoints import chat, models, evaluation, metrics, drift, benchmark, vectorstore, training, projects
-from app.core.auth import verify_admin_key, verify_api_key, verify_metrics_key
+from app.core.auth import verify_admin_key, verify_api_key
 
 # Main router without global dependencies to avoid stacking
 api_router = APIRouter()
@@ -39,7 +39,6 @@ api_router.include_router(
 api_router.include_router(
     metrics.router,
     tags=["metrics"],
-    dependencies=[Depends(verify_metrics_key)]
 )
 
 # Drift detection endpoints (require main API key)

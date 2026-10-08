@@ -9,6 +9,7 @@ Provides REST API for:
 5. Deploying a trained model to the live semantic index
 """
 import logging
+import uuid
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from starlette.concurrency import run_in_threadpool
@@ -25,6 +26,8 @@ from app.models.training_schemas import (
 )
 from app.models.training_job import TrainingJob
 from app.models.model_version import ModelVersion
+from app.models.embedding_record import EmbeddingRecord
+from app.models.index_version import IndexVersion
 from app.training.data_generator import TrainingDataGenerator
 from app.training.trainer import TrainingJobManager
 from app.training.deployment import deploy_embedding_model
@@ -51,13 +54,13 @@ async def collect_training_data(
     """
     Collect training data from cache interactions
 
-    This mines positive and negative pairs from your cache history
-    to create a training dataset for fine-tuning.
+    This loads curated labels and records observed cache matches for review.
 
     **Strategy:**
-    - Positive pairs: High-similarity queries that resulted in cache hits
-    - Hard negatives: Medium-similarity queries that shouldn't match
-    - Easy negatives: Random dissimilar queries
+    - Validated positives: Canonical semantic-duplicate fixtures
+    - Observed positives: Real cache matches retained as unvalidated candidates
+    - Hard negatives: Canonical similar-looking prompts that must not match
+    - Easy negatives: Prompts drawn from different curated topics
 
     **Returns:**
     - Number of pairs collected by type
@@ -286,19 +289,63 @@ async def deploy_model_version(
         logger.exception("Failed to deploy embedding model %s", version_id)
         raise HTTPException(status_code=500, detail=f"Model deployment failed: {exc}") from exc
 
-    db.query(ModelVersion).filter(ModelVersion.id != model.id).update(
-        {
-            ModelVersion.is_active: False,
-            ModelVersion.traffic_percentage: 0.0,
-        },
-        synchronize_session=False,
-    )
-    model.is_active = True
-    model.traffic_percentage = 100.0
-    model.deployed_at = datetime.utcnow()
+    deployed_at = datetime.utcnow()
+    try:
+        db.query(ModelVersion).filter(ModelVersion.id != model.id).update(
+            {
+                ModelVersion.is_active: False,
+                ModelVersion.traffic_percentage: 0.0,
+            },
+            synchronize_session=False,
+        )
+        model.is_active = True
+        model.traffic_percentage = 100.0
+        model.deployed_at = deployed_at
 
-    db.commit()
-    db.refresh(model)
+        db.query(EmbeddingRecord).update(
+            {
+                EmbeddingRecord.embedding_model: deployment.model_name,
+                EmbeddingRecord.embedding_dimension: deployment.dimension,
+            },
+            synchronize_session=False,
+        )
+        db.query(IndexVersion).filter(IndexVersion.active_until.is_(None)).update(
+            {
+                IndexVersion.active_until: deployed_at,
+                IndexVersion.is_active: False,
+            },
+            synchronize_session=False,
+        )
+        db.add(
+            IndexVersion(
+                version_name=f"deploy-{deployed_at:%Y%m%d%H%M%S}-{uuid.uuid4().hex[:8]}",
+                embedding_model=deployment.model_name,
+                embedding_dimension=deployment.dimension,
+                index_type=settings.VECTOR_INDEX_TYPE,
+                vector_count=deployment.rebuilt_vectors,
+                reason=f"Deployed model version {version_id}",
+                created_by="training_api",
+                file_path=settings.get_index_path(),
+                is_active=True,
+                active_from=deployed_at,
+            )
+        )
+        db.commit()
+        db.refresh(model)
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Failed to persist deployment metadata; restoring previous model")
+        try:
+            await run_in_threadpool(
+                deploy_embedding_model,
+                deployment.previous_model_name,
+            )
+        except Exception:
+            logger.exception("Failed to restore previous embedding model")
+        raise HTTPException(
+            status_code=500,
+            detail="Model deployment metadata could not be committed",
+        ) from exc
 
     logger.info("Deployed model %s and rebuilt %s vectors", version_id, deployment.rebuilt_vectors)
 

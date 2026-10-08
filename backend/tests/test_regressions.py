@@ -20,6 +20,8 @@ from app.models.training_pair import PairType, TrainingPair
 from app.repositories.cache_repo import CacheRepository
 from app.services import cache_recorder as cache_recorder_module
 from app.services.cache_recorder import CacheRecorder
+from app.cache.service import CacheService
+from app.models.search_schemas import CacheEntry as SearchCacheEntry, VectorMetadata
 
 
 @pytest.mark.asyncio
@@ -169,6 +171,28 @@ def test_cache_hit_increment_is_persisted():
     finally:
         session.close()
         engine.dispose()
+
+
+def test_metadata_fallback_uses_persistent_cache_uuid():
+    metadata = VectorMetadata(
+        vector_id=7,
+        cache_id="cache-uuid-7",
+        prompt_id="prompt-hash-7",
+        prompt_text="What is caching?",
+        response_text="A reusable result.",
+        model_name="provider-model",
+        embedding_model="embedding-model",
+    )
+    entry = SearchCacheEntry(
+        vector_id=7,
+        prompt_id=metadata.prompt_id,
+        prompt_text=metadata.prompt_text,
+        response_text=metadata.response_text,
+        similarity=0.99,
+        metadata=metadata,
+    )
+
+    assert CacheService._persistent_cache_id(entry) == "cache-uuid-7"
 
 
 class _SimilarityQuery:

@@ -308,9 +308,10 @@ async def create_cached_stream(
         )
         yield SSEFormatter.format_chunk(content_chunk)
 
-        # Small delay to simulate streaming
+        # Yield control without adding artificial latency to an already cached
+        # response.
         import asyncio
-        await asyncio.sleep(0.05)
+        await asyncio.sleep(0)
 
     # Send final chunk
     final_chunk = ChatCompletionStreamResponse(

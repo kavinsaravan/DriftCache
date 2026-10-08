@@ -106,6 +106,10 @@ class CacheDecisionResult(BaseModel):
     cached_response: Optional[CachedResponse] = None
     similarity: Optional[float] = None
     reason: str
+    retrieval_source: Optional[str] = Field(
+        None,
+        description="Serving layer used for a cache hit",
+    )
 
     # Decision factors
     similarity_threshold_met: bool = False

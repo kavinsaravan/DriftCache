@@ -65,6 +65,7 @@ class SemanticSearchService:
         embedding: Embedding,
         response_text: str,
         model_name: str,
+        cache_id: Optional[str] = None,
         tenant_id: str = "default",
         system_prompt: Optional[str] = None,
         conversation_history: Optional[str] = None,
@@ -77,6 +78,7 @@ class SemanticSearchService:
             embedding: Embedding to add
             response_text: The LLM response to cache
             model_name: Model that generated the response
+            cache_id: Persistent cache entry UUID
             tenant_id: Tenant namespace
             system_prompt: System prompt used (if any)
             conversation_history: Conversation context (for exact matching)
@@ -95,6 +97,7 @@ class SemanticSearchService:
         # Create metadata
         metadata = VectorMetadata(
             vector_id=vector_id,
+            cache_id=cache_id,
             prompt_id=embedding.metadata.prompt_hash,
             prompt_text=embedding.text,
             response_text=response_text,
@@ -389,11 +392,22 @@ class SemanticSearchService:
         if index_path is None:
             index_path = settings.get_index_path()
 
-        # Save FAISS index
-        self.faiss_index.save(index_path)
+        metadata_path = self.metadata_store.storage_path
+        temporary_index_path = f"{index_path}.saving"
+        temporary_metadata_path = f"{metadata_path}.saving"
 
-        # Save metadata
-        self.metadata_store.save()
+        # Build both files before replacing either live file. Metadata is
+        # replaced first because extra metadata is harmless, while an index
+        # entry without metadata cannot be served correctly.
+        try:
+            self.faiss_index.save(temporary_index_path)
+            self.metadata_store.save(temporary_metadata_path)
+            os.replace(temporary_metadata_path, metadata_path)
+            os.replace(temporary_index_path, index_path)
+        finally:
+            for temporary_path in (temporary_index_path, temporary_metadata_path):
+                if os.path.exists(temporary_path):
+                    os.remove(temporary_path)
 
         logger.info(f"Saved index and metadata")
 

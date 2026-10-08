@@ -174,7 +174,7 @@ class CacheRecorder:
                     matched_cache_id=decision_result.cached_response.cache_id if decision_result.cached_response else None,
                     similarity_score=decision_result.similarity,
                     latency_ms=latency_ms,
-                    retrieval_source="redis" if decision_result.is_hit() else None,
+                    retrieval_source=decision_result.retrieval_source,
                     threshold_version_id=threshold_version_id,
                     # Point-in-time versioning
                     embedding_model=embedding_model,

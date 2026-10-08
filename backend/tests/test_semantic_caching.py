@@ -5,27 +5,88 @@ Tests the critical path: store a response, then look it up with variations.
 These tests catch the majority of caching bugs.
 """
 import pytest
-import asyncio
-import tempfile
-import shutil
-from pathlib import Path
 from app.cache.service import CacheService
+from app.core.config import settings
+from app.embeddings.service import get_embedding_service
+from app.models.cache_schemas import CacheStats
 from app.models.schemas import Message
+from app.vectorstore.faiss_index import FAISSIndex
+from app.vectorstore.search import SemanticSearchService
+from app.vectorstore.storage import MetadataStore
+
+
+pytestmark = pytest.mark.slow
+
+
+class InMemoryRedisStore:
+    """Small RedisStore test double for cache-service unit tests."""
+
+    def __init__(self):
+        self.responses = {}
+        self.hits = 0
+        self.misses = 0
+        self.scores = []
+
+    async def set_cached_response(self, cache_id, response, ttl_seconds=None):
+        self.responses[cache_id] = response.model_copy(deep=True)
+
+    async def get_cached_response(self, cache_id):
+        response = self.responses.get(cache_id)
+        return response.model_copy(deep=True) if response else None
+
+    async def increment_cache_hit(self, cache_id=None):
+        self.hits += 1
+
+    async def increment_cache_miss(self):
+        self.misses += 1
+
+    async def record_similarity_score(self, score):
+        self.scores.insert(0, score)
+
+    async def get_recent_similarity_scores(self, limit=100):
+        return self.scores[:limit]
+
+    async def get_stats(self):
+        return CacheStats(
+            total_requests=self.hits + self.misses,
+            cache_hits=self.hits,
+            cache_misses=self.misses,
+            average_similarity=sum(self.scores) / len(self.scores) if self.scores else 0.0,
+        )
+
+    async def clear_all(self):
+        self.responses.clear()
+        self.hits = self.misses = 0
+        self.scores.clear()
+
+    async def count(self):
+        return len(self.responses)
 
 
 @pytest.fixture
-async def isolated_cache_service(tmp_path):
+async def isolated_cache_service(tmp_path, monkeypatch):
     """
     Create a fresh CacheService with isolated storage
 
     This prevents tests from polluting each other and the real cache.
     """
-    # Create cache service
-    cache_service = CacheService()
-
-    # Initialize Redis store and clear all data
-    from app.cache.redis_store import get_redis_store
-    cache_service.redis_store = await get_redis_store()
+    embedding_service = get_embedding_service()
+    monkeypatch.setattr(
+        type(settings),
+        "get_index_path",
+        lambda self: str(tmp_path / "faiss.index"),
+    )
+    index = FAISSIndex(dimension=embedding_service.model.dimension, index_type="Flat")
+    index.create_index()
+    search_service = SemanticSearchService(
+        faiss_index=index,
+        metadata_store=MetadataStore(str(tmp_path / "metadata.json")),
+    )
+    cache_service = CacheService(
+        redis_store=InMemoryRedisStore(),
+        search_service=search_service,
+        embedding_service=embedding_service,
+    )
 
     # Clear all caches to ensure isolation
     await cache_service.clear_cache()

@@ -4,6 +4,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.core import auth
+from app.api.endpoints.metrics import _tenant_scope
 
 
 @pytest.mark.asyncio
@@ -76,12 +77,35 @@ async def test_project_key_uses_its_project_tenant(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_project_key_does_not_gain_unscoped_metrics_access(monkeypatch):
+async def test_project_key_gets_project_scoped_metrics_access(monkeypatch):
     monkeypatch.setattr(auth.settings, "REQUIRE_API_KEY", True)
     monkeypatch.setattr(auth.settings, "API_KEY", "server-secret")
     monkeypatch.setattr(auth.settings, "METRICS_API_KEY", "metrics-secret")
 
-    with pytest.raises(HTTPException) as exc_info:
-        await auth.verify_metrics_key(x_api_key="dc_live_project-key", bearer=None)
+    expected = auth.AuthContext(
+        tenant_id="project:123",
+        project_id="123",
+        api_key_id="key-123",
+    )
+    monkeypatch.setattr(auth, "_project_context", lambda _: expected)
 
-    assert exc_info.value.status_code == 401
+    context = await auth.verify_metrics_key(
+        x_api_key="dc_live_project-key",
+        bearer=None,
+    )
+
+    assert context == expected
+
+
+def test_metrics_tenant_scope_comes_from_non_admin_credential():
+    context = auth.AuthContext(tenant_id="project:123", project_id="123")
+
+    assert _tenant_scope(context, "project:someone-else") == "project:123"
+    assert _tenant_scope(context, None) == "project:123"
+
+
+def test_admin_metrics_credential_can_select_or_aggregate_tenants():
+    context = auth.AuthContext(tenant_id="default", is_admin=True)
+
+    assert _tenant_scope(context, "project:123") == "project:123"
+    assert _tenant_scope(context, None) is None

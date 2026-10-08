@@ -143,12 +143,10 @@ async def verify_metrics_key(
     """
     Verify API key for metrics/dashboard endpoints (read-only)
 
-    Accepts either:
+    Accepts:
     - Main API_KEY (full access)
-    - METRICS_API_KEY (read-only, safe for frontend)
-
-    This allows the dashboard to use a separate read-only key
-    that can be safely included in the frontend build.
+    - METRICS_API_KEY (read-only access to the default tenant)
+    - Project API keys (read-only access to their own tenant)
 
     Args:
         x_api_key: API key from X-API-Key header
@@ -175,5 +173,9 @@ async def verify_metrics_key(
         return AuthContext(tenant_id="default", is_admin=True)
     if _matches(provided_key, settings.METRICS_API_KEY):
         return AuthContext(tenant_id="default", is_metrics_only=True)
+
+    context = await run_in_threadpool(_project_context, provided_key)
+    if context is not None:
+        return context
 
     raise _invalid_key()

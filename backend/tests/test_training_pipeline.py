@@ -60,11 +60,18 @@ def test_pair_evaluation_populates_quality_metrics():
 
 def test_training_data_uses_disjoint_validation_split():
     pairs = [
-        TrainingPair(anchor_text=f"p{i}", comparison_text=f"p{i}-match", pair_type=PairType.POSITIVE)
+        TrainingPair(anchor_text=f"p{i}", comparison_text=f"p{i}-match", pair_type=PairType.POSITIVE, is_validated=1)
         for i in range(5)
     ] + [
-        TrainingPair(anchor_text=f"n{i}", comparison_text=f"n{i}-other", pair_type=PairType.HARD_NEGATIVE)
+        TrainingPair(anchor_text=f"n{i}", comparison_text=f"n{i}-other", pair_type=PairType.HARD_NEGATIVE, is_validated=1)
         for i in range(3)
+    ] + [
+        TrainingPair(
+            anchor_text="observed-unreviewed",
+            comparison_text="possible-false-hit",
+            pair_type=PairType.POSITIVE,
+            is_validated=0,
+        )
     ]
 
     class FakeQuery:
@@ -80,9 +87,10 @@ def test_training_data_uses_disjoint_validation_split():
         random_seed=7,
     )
 
-    training_texts = {tuple(example.texts) for example in train_loader.dataset}
-    validation_texts = {tuple(example.texts) for example in validation}
+    training_texts = {text for example in train_loader.dataset for text in example.texts}
+    validation_texts = {text for example in validation for text in example.texts}
     assert training_texts.isdisjoint(validation_texts)
+    assert "observed-unreviewed" not in training_texts | validation_texts
     assert all(example.label == 1.0 for example in train_loader.dataset)
     assert any(example.label == 0.0 for example in validation)
 
@@ -142,6 +150,7 @@ def test_model_cutover_rebuilds_vectors_and_preserves_ids(monkeypatch, tmp_path)
     store.add(
         VectorMetadata(
             vector_id=7,
+            cache_id="cache-7",
             prompt_id="prompt-7",
             prompt_text="hello",
             response_text="world",
@@ -173,6 +182,7 @@ def test_model_cutover_rebuilds_vectors_and_preserves_ids(monkeypatch, tmp_path)
     assert rebuilt == 1
     assert service.faiss_index.dimension == 3
     assert service.metadata_store.get(7).cache_key_hash == "redis-key"
+    assert service.metadata_store.get(7).cache_id == "cache-7"
     assert service.metadata_store.get(7).embedding_model == "new-model"
     new_id = service.faiss_index.add_vectors(np.asarray([[1.0, 0.0, 0.0]], dtype=np.float32))[0]
     assert new_id == 8
