@@ -2,12 +2,18 @@
 Application configuration
 """
 from typing import List, Literal
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 
 
 class Settings(BaseSettings):
     """Application settings"""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra="ignore",
+    )
 
     # API Settings
     API_V1_PREFIX: str = "/api/v1"
@@ -91,7 +97,6 @@ class Settings(BaseSettings):
 
     # Fine-Tuning & Model Training
     HF_TOKEN: str = Field(default="", description="Hugging Face API token for model uploads")
-    WANDB_API_KEY: str = Field(default="", description="Weights & Biases API key for experiment tracking")
     ENABLE_TRAINING: bool = Field(default=True, description="Enable fine-tuning capabilities")
 
     # Vector Search
@@ -108,6 +113,11 @@ class Settings(BaseSettings):
     # Autonomous Optimization
     DRIFT_DETECTION_ENABLED: bool = Field(default=True)
     OPTIMIZATION_INTERVAL_SECONDS: int = Field(default=300)  # 5 minutes
+    VECTOR_CLEANUP_INTERVAL_SECONDS: int = Field(
+        default=3600,
+        ge=60,
+        description="Seconds between expired-vector cleanup runs",
+    )
 
     def get_index_path(self) -> str:
         """Get absolute path to FAISS index file"""
@@ -128,11 +138,5 @@ class Settings(BaseSettings):
         storage_dir = project_root / self.INDEX_STORAGE_DIR
         storage_dir.mkdir(parents=True, exist_ok=True)
         return str(storage_dir / self.METADATA_FILENAME)
-
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
-        extra = "ignore"  # Ignore unknown env vars (for backwards compatibility)
-
 
 settings = Settings()

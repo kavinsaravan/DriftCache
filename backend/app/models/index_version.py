@@ -1,11 +1,10 @@
 """
 Index Version Model
 
-Tracks FAISS index versions for point-in-time evaluation and autonomous rebuilds
+Tracks FAISS index versions for point-in-time evaluation
 """
 from sqlalchemy import Column, String, Integer, DateTime, Text, Boolean
 from sqlalchemy.sql import func
-from datetime import datetime
 
 from app.database.base import Base
 
@@ -26,7 +25,6 @@ class IndexVersion(Base):
     - Embedding model A/B testing
     - Historical consistency verification
     - Prevention of data leakage in evaluation
-    - Autonomous index rebuild tracking
     """
     __tablename__ = "index_versions"
 
@@ -41,15 +39,14 @@ class IndexVersion(Base):
     embedding_dimension = Column(Integer, nullable=False)  # e.g., 384
 
     # FAISS configuration
-    index_type = Column(String(50), nullable=False)  # e.g., "FLAT", "IVF", "HNSW"
+    index_type = Column(String(50), nullable=False)  # Currently "FLAT"
     vector_count = Column(Integer, default=0)  # Number of vectors in this version
 
     # Change metadata
     reason = Column(Text, nullable=True)  # Why this version was created
-    created_by = Column(String(100), nullable=True)  # "manual", "agent:index_rebuilder", etc.
+    created_by = Column(String(100), nullable=True)  # e.g., "manual" or "maintenance_service"
 
-    # Rebuild tracking
-    rebuild_job_id = Column(Integer, nullable=True)  # Link to rebuild job
+    # Persisted index metadata
     file_path = Column(String(500), nullable=True)  # Path to index file
     is_active = Column(Boolean, nullable=False, server_default='false')  # Currently active index
 
@@ -77,7 +74,6 @@ class IndexVersion(Base):
             "vector_count": self.vector_count,
             "reason": self.reason,
             "created_by": self.created_by,
-            "rebuild_job_id": self.rebuild_job_id,
             "file_path": self.file_path,
             "is_active": self.is_active,
             "active_from": self.active_from.isoformat(),

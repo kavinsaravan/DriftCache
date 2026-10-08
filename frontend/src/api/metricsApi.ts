@@ -100,7 +100,7 @@ export const getSummary = async (period: string = '24h', tenantId?: string): Pro
   if (USE_MOCK_DATA) return Promise.resolve(mockDashboardData.summary);
 
   try {
-    const params: any = { period };
+    const params: Record<string, string> = { period };
     if (tenantId) params.tenant_id = tenantId;
 
     const response = await metricsApi.get('/summary', { params });
@@ -117,7 +117,7 @@ export const getLatencyStats = async (period: string = '24h', tenantId?: string)
   if (USE_MOCK_DATA) return Promise.resolve(mockLatencyStats);
 
   try {
-    const params: any = { period };
+    const params: Record<string, string> = { period };
     if (tenantId) params.tenant_id = tenantId;
 
     const response = await metricsApi.get('/latency', { params });
@@ -138,7 +138,7 @@ export const getSimilarityDistribution = async (
   if (USE_MOCK_DATA) return Promise.resolve(mockSimilarityDistribution);
 
   try {
-    const params: any = { period, bins };
+    const params: Record<string, string | number> = { period, bins };
     if (tenantId) params.tenant_id = tenantId;
 
     const response = await metricsApi.get('/similarity-distribution', { params });
@@ -159,7 +159,7 @@ export const getTopCachedPrompts = async (
   if (USE_MOCK_DATA) return Promise.resolve(mockTopCachedPrompts);
 
   try {
-    const params: any = { limit, period };
+    const params: Record<string, string | number> = { limit, period };
     if (tenantId) params.tenant_id = tenantId;
 
     const response = await metricsApi.get('/top-cached-prompts', { params });
@@ -176,7 +176,7 @@ export const getProviderUsage = async (period: string = '24h', tenantId?: string
   if (USE_MOCK_DATA) return Promise.resolve(mockProviderUsage);
 
   try {
-    const params: any = { period };
+    const params: Record<string, string> = { period };
     if (tenantId) params.tenant_id = tenantId;
 
     const response = await metricsApi.get('/provider-usage', { params });
@@ -203,7 +203,7 @@ export const getTimeSeries = async (
   }
 
   try {
-    const params: any = { period, interval };
+    const params: Record<string, string> = { period, interval };
     if (tenantId) params.tenant_id = tenantId;
 
     const response = await metricsApi.get(`/time-series/${metric}`, { params });
@@ -226,7 +226,7 @@ export const getDashboardData = async (period: string = '24h', tenantId?: string
   }
 
   try {
-    const params: any = { period };
+    const params: Record<string, string> = { period };
     if (tenantId) params.tenant_id = tenantId;
 
     const response = await metricsApi.get('/dashboard', { params });

@@ -7,8 +7,9 @@ Features:
 - Historical event recording
 - OpenAI-compatible API endpoints
 """
+import asyncio
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,6 +20,57 @@ from app.database.session import get_db_manager, shutdown_db
 from app.api.routes import api_router
 
 logger = logging.getLogger(__name__)
+
+
+def cleanup_expired_vectors() -> int:
+    """Remove expired vectors and persist the index when it changes."""
+    from app.vectorstore.search import get_search_service
+
+    search_service = get_search_service()
+    removed_count = search_service.remove_expired_vectors()
+    if removed_count > 0:
+        search_service.save_index()
+        logger.info("Removed and persisted %s expired FAISS vectors", removed_count)
+    return removed_count
+
+
+async def periodic_vector_cleanup(interval_seconds: int) -> None:
+    """Run expired-vector cleanup until the application shuts down."""
+    while True:
+        await asyncio.sleep(interval_seconds)
+        try:
+            await asyncio.to_thread(cleanup_expired_vectors)
+        except Exception:
+            logger.exception("Periodic expired-vector cleanup failed")
+
+
+def get_llm_configuration_status() -> dict:
+    """Describe configured providers and whether the default model can route."""
+    configured_providers = []
+    if settings.OPENAI_API_KEY:
+        configured_providers.append("openai")
+    if settings.ANTHROPIC_API_KEY:
+        configured_providers.append("anthropic")
+    if settings.OLLAMA_BASE_URL:
+        configured_providers.append("ollama")
+
+    model = settings.DEFAULT_MODEL.lower()
+    if model.startswith("gpt-"):
+        default_provider = "openai"
+    elif model.startswith("claude-"):
+        default_provider = "anthropic"
+    elif model.startswith(("llama", "mistral", "mixtral", "phi", "codellama")):
+        default_provider = "ollama"
+    else:
+        default_provider = None
+
+    default_ready = default_provider in configured_providers if default_provider else False
+    return {
+        "status": "configured" if default_ready else "not_configured",
+        "default_model": settings.DEFAULT_MODEL,
+        "default_provider": default_provider,
+        "configured_providers": configured_providers,
+    }
 
 
 @asynccontextmanager
@@ -75,39 +127,40 @@ async def lifespan(app: FastAPI):
         logger.error(f"Redis URL being used: {settings.get_redis_url()[:20]}...")  # Log first 20 chars for debugging
         logger.warning("Running without Redis - cache will use fallback storage")
 
-    # Clean up expired vectors from FAISS index on startup
+    # Clean up expired vectors from FAISS index on startup.
     try:
-        from app.vectorstore.search import get_search_service
-        search_service = get_search_service()
-        removed_count = search_service.remove_expired_vectors()
-        if removed_count > 0:
-            logger.info(f"Removed {removed_count} expired vectors from FAISS index")
-            # Save index after cleanup
-            search_service.save_index()
+        cleanup_expired_vectors()
     except Exception as e:
         logger.warning(f"Failed to clean up expired vectors on startup: {e}")
 
-    # TODO: Add periodic cleanup of expired vectors (e.g., daily scheduled task)
-    # For now, cleanup runs on startup and can be triggered by index rebuild agent
+    cleanup_task = asyncio.create_task(
+        periodic_vector_cleanup(settings.VECTOR_CLEANUP_INTERVAL_SECONDS),
+        name="expired-vector-cleanup",
+    )
 
-    yield
-
-    # Shutdown
-    logger.info("Shutting down DriftCache API...")
-
-    # Save FAISS index to disk before shutdown
     try:
-        from app.vectorstore.search import get_search_service
-        search_service = get_search_service()
-        search_service.save_index()
-        logger.info("FAISS index saved to disk")
-    except Exception as e:
-        logger.error(f"Failed to save FAISS index on shutdown: {e}")
+        yield
+    finally:
+        cleanup_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await cleanup_task
 
-    await shutdown_redis()
-    logger.info("Redis connection closed")
-    shutdown_db()
-    logger.info("PostgreSQL connection closed")
+        # Shutdown
+        logger.info("Shutting down DriftCache API...")
+
+        # Save FAISS index to disk before shutdown
+        try:
+            from app.vectorstore.search import get_search_service
+            search_service = get_search_service()
+            search_service.save_index()
+            logger.info("FAISS index saved to disk")
+        except Exception as e:
+            logger.error(f"Failed to save FAISS index on shutdown: {e}")
+
+        await shutdown_redis()
+        logger.info("Redis connection closed")
+        shutdown_db()
+        logger.info("PostgreSQL connection closed")
 
 
 # Initialize FastAPI app
@@ -178,13 +231,19 @@ async def health_check():
         logger.error(f"Redis health check failed: {e}")
         redis_status = "error"
 
-    # Overall status
-    all_healthy = db_status == "connected" and redis_status == "connected"
+    llm_status = get_llm_configuration_status()
+
+    # Overall status includes the provider required by the configured default model.
+    all_healthy = (
+        db_status == "connected"
+        and redis_status == "connected"
+        and llm_status["status"] == "configured"
+    )
     overall_status = "healthy" if all_healthy else "degraded"
 
     return {
         "status": overall_status,
         "database": db_status,
         "redis": redis_status,
-        "llm": "configured"  # TODO: Add actual LLM check
+        "llm": llm_status,
     }

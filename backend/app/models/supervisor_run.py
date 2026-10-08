@@ -43,7 +43,6 @@ class SupervisorRun(Base):
 
     # Agents invoked
     threshold_optimizer_run_id = Column(Integer, nullable=True)
-    index_rebuild_job_id = Column(Integer, nullable=True)
     cache_invalidation_count = Column(Integer, nullable=True)
 
     # Final system state
@@ -111,7 +110,6 @@ class SupervisorRun(Base):
             "actions_taken": self.actions_taken,
             "agents_invoked": {
                 "threshold_optimizer_run_id": self.threshold_optimizer_run_id,
-                "index_rebuild_job_id": self.index_rebuild_job_id,
                 "cache_invalidation_count": self.cache_invalidation_count,
             },
             "final_state": {

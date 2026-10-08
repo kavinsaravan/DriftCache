@@ -29,6 +29,7 @@ from sqlalchemy.orm import Session
 from app.models.training_pair import TrainingPair, PairType
 from app.models.training_job import TrainingJob, JobStatus
 from app.models.training_schemas import TrainingConfig
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -262,6 +263,7 @@ class ContrastiveTrainer:
             URL to the model on HF Hub
         """
         logger.info(f"Uploading model to Hugging Face Hub: {hub_model_id}")
+        token = token or settings.HF_TOKEN or None
 
         try:
             # Load the saved model

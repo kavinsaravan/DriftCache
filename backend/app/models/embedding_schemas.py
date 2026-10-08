@@ -5,7 +5,7 @@ Data models for embeddings and related metadata
 """
 from typing import List, Optional, Dict, Any
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 import hashlib
 
 
@@ -50,8 +50,8 @@ class Embedding(BaseModel):
     text: str = Field(..., description="Original text")
     metadata: EmbeddingMetadata
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "vector": [0.13, -0.44, 0.82, 0.07],
                 "dimension": 384,
@@ -64,6 +64,7 @@ class Embedding(BaseModel):
                 }
             }
         }
+    )
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for storage"""
@@ -85,8 +86,8 @@ class SimilarityResult(BaseModel):
     similarity: float = Field(..., ge=0.0, le=1.0, description="Cosine similarity score")
     rank: int = Field(..., ge=0, description="Rank in search results (0 = best match)")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "embedding": {
                     "vector": [0.13, -0.44, 0.82],
@@ -98,6 +99,7 @@ class SimilarityResult(BaseModel):
                 "rank": 0
             }
         }
+    )
 
 
 class EmbeddingBatch(BaseModel):

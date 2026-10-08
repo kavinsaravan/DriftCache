@@ -37,7 +37,7 @@ frontend:
 	cd frontend && npm run dev
 
 test:
-	cd backend && $(PYTHON) -m pytest tests -m "not integration"
+	cd backend && mkdir -p pytest-results && $(PYTHON) -m pytest tests -m "not integration and not slow" --junitxml=pytest-results/junit.xml
 
 test-integration:
 	cd backend && $(PYTHON) -m pytest tests -m integration

@@ -6,7 +6,7 @@ Exposes drift detection and alert management
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.database.session import get_db
 from app.drift.service import get_drift_service
@@ -26,8 +26,7 @@ class DriftCheckResponse(BaseModel):
     windows: dict
     recommendation: dict
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DriftAlertResponse(BaseModel):
@@ -50,8 +49,7 @@ class DriftAlertResponse(BaseModel):
     resolved_at: Optional[str]
     created_at: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ResolveAlertRequest(BaseModel):
