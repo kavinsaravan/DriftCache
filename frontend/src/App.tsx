@@ -11,7 +11,6 @@ import CacheAnalytics from './pages/CacheAnalytics';
 import LatencyAnalytics from './pages/LatencyAnalytics';
 import CostSavings from './pages/CostSavings';
 import RequestExplorer from './pages/RequestExplorer';
-import Settings from './pages/Settings';
 
 // Create React Query client
 const queryClient = new QueryClient({
@@ -35,7 +34,6 @@ function App() {
             <Route path="latency" element={<LatencyAnalytics />} />
             <Route path="cost" element={<CostSavings />} />
             <Route path="requests" element={<RequestExplorer />} />
-            <Route path="settings" element={<Settings />} />
           </Route>
         </Routes>
       </BrowserRouter>

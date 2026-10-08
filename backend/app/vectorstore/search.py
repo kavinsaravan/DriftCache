@@ -10,11 +10,13 @@ Combines:
 """
 import time
 import logging
+import os
 from typing import List, Optional, Tuple
 import numpy as np
 
 from app.vectorstore.faiss_index import get_faiss_index, FAISSIndex
 from app.vectorstore.storage import get_metadata_store, MetadataStore
+from app.embeddings.model import EmbeddingModel, set_embedding_model
 from app.embeddings.service import get_embedding_service
 from app.embeddings.utils import list_to_vector
 from app.models.search_schemas import (
@@ -464,6 +466,63 @@ class SemanticSearchService:
         self.faiss_index.reset()
         self.metadata_store.clear()
         logger.info("Cleared index and metadata")
+
+    def rebuild_with_embedding_model(self, embedding_model: EmbeddingModel) -> int:
+        """Re-embed every live entry, persist it, and switch models as one cutover."""
+        current_metadata = self.metadata_store.get_all()
+        new_index = FAISSIndex(
+            dimension=embedding_model.dimension,
+            index_type=settings.VECTOR_INDEX_TYPE,
+        )
+        new_index.create_index()
+        new_store = MetadataStore(storage_path=self.metadata_store.storage_path)
+
+        if current_metadata:
+            vectors = embedding_model.encode(
+                [item.prompt_text for item in current_metadata],
+                normalize=True,
+                show_progress=False,
+            )
+            ids = np.asarray([item.vector_id for item in current_metadata], dtype=np.int64)
+            new_index.add_vectors(vectors, ids=ids)
+
+            rebuilt_metadata = []
+            for item in current_metadata:
+                rebuilt = item.model_copy(deep=True)
+                rebuilt.embedding_model = embedding_model.model_name
+                rebuilt_metadata.append(rebuilt)
+            new_store.add_batch(rebuilt_metadata)
+
+        index_path = settings.get_index_path()
+        metadata_path = settings.get_metadata_path()
+        temporary_index_path = f"{index_path}.deploying"
+        temporary_metadata_path = f"{metadata_path}.deploying"
+        try:
+            new_index.save(temporary_index_path)
+            new_store.save(temporary_metadata_path)
+            os.replace(temporary_index_path, index_path)
+            os.replace(temporary_metadata_path, metadata_path)
+        finally:
+            for temporary_path in (temporary_index_path, temporary_metadata_path):
+                if os.path.exists(temporary_path):
+                    os.remove(temporary_path)
+
+        # Swap the objects only after the replacement index is fully built and saved.
+        self.faiss_index.dimension = new_index.dimension
+        self.faiss_index.index = new_index.index
+        self.faiss_index._next_id = new_index._next_id
+        self.metadata_store.metadata = new_store.metadata
+        self.embedding_service.model = embedding_model
+        set_embedding_model(embedding_model)
+        settings.EMBEDDING_MODEL = embedding_model.model_name
+        settings.EMBEDDING_DIMENSION = embedding_model.dimension
+
+        logger.info(
+            "Deployed embedding model %s and rebuilt %s vectors",
+            embedding_model.model_name,
+            len(current_metadata),
+        )
+        return len(current_metadata)
 
 
 # Global instance

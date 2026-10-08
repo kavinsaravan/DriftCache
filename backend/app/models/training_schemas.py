@@ -3,7 +3,7 @@ Training Schemas
 
 Pydantic models for training API requests/responses
 """
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 from enum import Enum
@@ -84,6 +84,13 @@ class TrainingConfig(BaseModel):
     loss_function: str = Field(default="MultipleNegativesRankingLoss", description="Loss function to use")
     evaluation_steps: int = Field(default=100, description="Steps between evaluations")
     save_steps: int = Field(default=500, description="Steps between checkpoints")
+    validation_split: float = Field(
+        default=0.2,
+        gt=0.0,
+        lt=0.5,
+        description="Fraction of each pair class reserved for validation",
+    )
+    random_seed: int = Field(default=42, description="Seed used for the train/validation split")
 
 
 class TrainingJobCreate(BaseModel):
@@ -147,17 +154,3 @@ class ModelVersionResponse(BaseModel):
     deployed_at: Optional[datetime]
 
     model_config = ConfigDict(from_attributes=True)
-
-
-# Evaluation Schemas
-class EvaluationMetrics(BaseModel):
-    """Evaluation metrics for a model"""
-    precision_at_1: float
-    precision_at_5: float
-    recall_at_1: float
-    recall_at_5: float
-    mrr: float  # Mean Reciprocal Rank
-    ndcg: float  # Normalized Discounted Cumulative Gain
-    avg_similarity_positive: float
-    avg_similarity_negative: float
-    latency_ms: float

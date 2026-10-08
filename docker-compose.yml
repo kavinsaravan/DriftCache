@@ -6,15 +6,15 @@ services:
     image: postgres:15-alpine
     container_name: driftcache-postgres
     environment:
-      POSTGRES_DB: ${DATABASE_NAME:-driftcache}
-      POSTGRES_USER: ${DATABASE_USER:-driftcache}
-      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-driftcache_password}
+      POSTGRES_DB: ${POSTGRES_DB:-driftcache}
+      POSTGRES_USER: ${POSTGRES_USER:-driftcache}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-driftcache_password}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-driftcache}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-driftcache} -d ${POSTGRES_DB:-driftcache}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -45,30 +45,40 @@ services:
       dockerfile: Dockerfile
     container_name: driftcache-backend
     environment:
-      DATABASE_HOST: postgres
-      DATABASE_PORT: 5432
-      DATABASE_NAME: ${DATABASE_NAME:-driftcache}
-      DATABASE_USER: ${DATABASE_USER:-driftcache}
-      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-driftcache_password}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-driftcache}:${POSTGRES_PASSWORD:-driftcache_password}@postgres:5432/${POSTGRES_DB:-driftcache}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-driftcache}
+      POSTGRES_USER: ${POSTGRES_USER:-driftcache}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-driftcache_password}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_DB: ${REDIS_DB:-0}
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
-      LLM_MODEL: ${LLM_MODEL:-gpt-4}
-      DEFAULT_SIMILARITY_THRESHOLD: ${DEFAULT_SIMILARITY_THRESHOLD:-0.90}
-      ENVIRONMENT: ${ENVIRONMENT:-production}
+      API_KEY: ${API_KEY:-}
+      METRICS_API_KEY: ${METRICS_API_KEY:-}
+      REQUIRE_API_KEY: ${REQUIRE_API_KEY:-true}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      DEFAULT_MODEL: ${DEFAULT_MODEL:-gpt-4o-mini}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
+      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-384}
+      SIMILARITY_THRESHOLD: ${SIMILARITY_THRESHOLD:-0.90}
+      ENABLE_TRAINING: ${ENABLE_TRAINING:-true}
+      HF_TOKEN: ${HF_TOKEN:-}
+      INDEX_STORAGE_DIR: /app/data/cache
     ports:
       - "8000:8000"
     volumes:
-      - faiss_indices:/app/faiss_indices
+      - faiss_indices:/app/data/cache
+      - model_artifacts:/app/models
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/status')"]
+      test: ["CMD", "python", "-c", "import urllib.request; assert urllib.request.urlopen('http://localhost:8000/api/v1/status', timeout=2).status == 200"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -105,4 +115,6 @@ volumes:
   redis_data:
     driver: local
   faiss_indices:
+    driver: local
+  model_artifacts:
     driver: local

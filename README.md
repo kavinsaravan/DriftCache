@@ -11,7 +11,7 @@ DriftCache is an OpenAI-compatible API proxy that caches semantically similar LL
 - **Dual Storage Architecture** - Redis for fast retrieval + PostgreSQL for analytics and persistence
 - **Drift Detection** - Statistical monitoring (KS-test, Wasserstein distance) to detect query distribution changes
 - **Fine-Tuning Pipeline** - PyTorch-based contrastive learning to adapt embeddings to domain-specific queries
-- **Threshold Evaluation** - Offline utilities for analyzing candidate similarity thresholds with multi-objective scoring
+- **Threshold Evaluation** - Offline utilities for comparing precision and recall at candidate thresholds
 
 ## Technology Stack
 
@@ -63,7 +63,6 @@ DriftCache/
 │   │   │   ├── service.py
 │   │   │   ├── model.py
 │   │   │   └── utils.py
-│   │   ├── optimization/
 │   │   ├── drift/
 │   │   │   ├── schemas.py
 │   │   │   ├── detector.py
@@ -150,9 +149,9 @@ DriftCache/
 │  └─────────────────────────────────────┘   │
 │                                            │
 │  ┌─────────────────────────────────────┐   │
-│  │  Optimization & Monitoring          │   │
+│  │  Evaluation & Monitoring            │   │
 │  │  - Drift Detection (SciPy stats)    │   │
-│  │  - Threshold Optimization           │   │
+│  │  - Offline Threshold Analysis       │   │
 │  │  - Performance Analytics            │   │
 │  └─────────────────────────────────────┘   │
 └─────────────────────────────────────────────┘
@@ -183,7 +182,6 @@ cp .env.example .env
 # - OPENAI_API_KEY or ANTHROPIC_API_KEY: For LLM provider
 
 # Start with Docker
-# Note: Docker configuration may need updates to environment variable names
 make up
 
 # Open dashboard
@@ -353,11 +351,11 @@ Request → Embed prompt → FAISS search → Similarity ≥ threshold?
 2. FAISS performs k-NN search against cached prompt embeddings
 3. If similarity score ≥ threshold (default 0.85), retrieve from Redis
 4. Otherwise, forward to LLM provider and cache the response
-5. All decisions logged to PostgreSQL for drift detection and optimization
+5. All decisions are logged to PostgreSQL for analytics and drift detection
 
 **Analysis Pipeline:**
 - Drift detector monitors similarity score distributions using KS-test and Wasserstein distance
-- Threshold evaluation utilities analyze candidate thresholds using multi-objective scoring (precision/recall/cost)
+- Threshold evaluation utilities compare candidate thresholds on historical cache decisions
 - Fine-tuning trainer uses contrastive learning on cached query pairs to improve domain-specific matching
 
 ## API Endpoints
@@ -388,7 +386,7 @@ GET  /api/v1/benchmark/summary     # Benchmark results
 
 **End-to-End ML Infrastructure:**
 
-DriftCache includes a complete fine-tuning pipeline to adapt the embedding model to your specific domain:
+DriftCache includes an experimental end-to-end pipeline to adapt the embedding model to your domain:
 
 **1. Training Data Collection**
 ```bash
@@ -407,17 +405,17 @@ POST /api/v1/training/jobs
 - Configurable hyperparameters (batch size, epochs, learning rate)
 
 **3. Model Evaluation**
-- Precision@K, Recall@K metrics
-- Mean Reciprocal Rank (MRR)
-- Normalized Discounted Cumulative Gain (NDCG)
-- Latency benchmarking
+- Held-out validation split
+- Pair-classification accuracy, precision, recall, and F1
+- Positive/negative similarity averages and mean squared error
 
 **4. Hugging Face Integration**
 - Upload models to Hugging Face Hub
-- Model versioning and registry
+- Register completed models and their validation metrics in PostgreSQL
+- Deploy a model with a full FAISS re-embedding and runtime cutover
 - Easy sharing and collaboration
 
-See [FINE_TUNING_IMPLEMENTATION.md](FINE_TUNING_IMPLEMENTATION.md) for detailed documentation.
+See [the training module guide](backend/app/training/README.md) for configuration and deployment details.
 
 ## Drift Detection
 

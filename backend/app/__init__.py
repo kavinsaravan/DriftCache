@@ -1,6 +1,6 @@
 """
 DriftCache Backend Application
-Adaptive Semantic Caching & Autonomous Optimization Platform for LLM Systems
+Semantic caching and quality monitoring for LLM systems
 """
 
 __version__ = "0.1.0"

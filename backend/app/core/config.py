@@ -110,9 +110,8 @@ class Settings(BaseSettings):
     FAISS_INDEX_FILENAME: str = Field(default="faiss.index")
     METADATA_FILENAME: str = Field(default="metadata.json")
 
-    # Autonomous Optimization
+    # Drift monitoring and index maintenance
     DRIFT_DETECTION_ENABLED: bool = Field(default=True)
-    OPTIMIZATION_INTERVAL_SECONDS: int = Field(default=300)  # 5 minutes
     VECTOR_CLEANUP_INTERVAL_SECONDS: int = Field(
         default=3600,
         ge=60,

@@ -94,7 +94,8 @@ class DatabaseManager:
         if not self._initialized:
             raise RuntimeError("Database not initialized")
 
-        from app.database.base import Base
+        from app.database.base import Base, import_models
+        import_models()
         Base.metadata.create_all(bind=self.engine)
         logger.info("Database tables created")
 

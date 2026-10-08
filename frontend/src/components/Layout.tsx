@@ -10,7 +10,6 @@ import {
   Clock,
   DollarSign,
   Database,
-  Settings,
 } from 'lucide-react';
 
 const navigation = [
@@ -19,7 +18,6 @@ const navigation = [
   { name: 'Latency', href: '/latency', icon: Clock },
   { name: 'Cost Savings', href: '/cost', icon: DollarSign },
   { name: 'Requests', href: '/requests', icon: Database },
-  { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
 export default function Layout() {

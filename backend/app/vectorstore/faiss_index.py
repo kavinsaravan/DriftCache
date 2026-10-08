@@ -101,6 +101,8 @@ class FAISSIndex:
         if ids is None:
             ids = np.arange(self._next_id, self._next_id + n_vectors, dtype=np.int64)
             self._next_id += n_vectors
+        elif len(ids):
+            self._next_id = max(self._next_id, int(np.max(ids)) + 1)
 
         # Add to index
         # IndexIDMap2 requires explicit IDs

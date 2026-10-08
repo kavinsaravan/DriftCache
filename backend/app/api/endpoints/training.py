@@ -6,14 +6,15 @@ Provides REST API for:
 2. Starting fine-tuning jobs
 3. Monitoring training progress
 4. Managing model versions
-5. A/B testing different models
+5. Deploying a trained model to the live semantic index
 """
 import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
-from app.database.session import get_db
+from app.database.session import get_db, get_db_manager
 from app.models.training_schemas import (
     DataCollectionRequest,
     DataCollectionResponse,
@@ -26,11 +27,18 @@ from app.models.training_job import TrainingJob
 from app.models.model_version import ModelVersion
 from app.training.data_generator import TrainingDataGenerator
 from app.training.trainer import TrainingJobManager
+from app.training.deployment import deploy_embedding_model
+from app.core.config import settings
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+def require_training_enabled() -> None:
+    if not settings.ENABLE_TRAINING:
+        raise HTTPException(status_code=503, detail="Model training is disabled")
+
+
+router = APIRouter(dependencies=[Depends(require_training_enabled)])
 
 
 # ==================== Data Collection Endpoints ====================
@@ -109,9 +117,9 @@ async def create_training_job(
 
     **Training Process:**
     - Loads training pairs from database
-    - Fine-tunes using contrastive learning (MNR Loss or Triplet Loss)
+    - Fine-tunes using a configured contrastive loss
     - Saves checkpoints during training
-    - Evaluates on test set
+    - Evaluates on a held-out validation split
     - Optionally uploads to HF Hub
 
     **Returns:**
@@ -132,13 +140,18 @@ async def create_training_job(
         )
 
         # Start training in background
+        job_id = job.job_id
+        upload_to_hub = request.upload_to_hub
+        hub_model_id = request.hub_model_id
+
         def run_training():
             try:
-                manager.run_training_job(
-                    job_id=job.job_id,
-                    upload_to_hub=request.upload_to_hub,
-                    hub_model_id=request.hub_model_id
-                )
+                with get_db_manager().session_scope() as background_db:
+                    TrainingJobManager(background_db).run_training_job(
+                        job_id=job_id,
+                        upload_to_hub=upload_to_hub,
+                        hub_model_id=hub_model_id,
+                    )
             except Exception as e:
                 logger.error(f"Background training failed: {e}")
 
@@ -245,23 +258,18 @@ async def deploy_model_version(
     db: Session = Depends(get_db)
 ):
     """
-    Deploy a model version to production
-
-    **A/B Testing:**
-    - Set traffic_percentage < 100 to gradually roll out
-    - Monitor performance before full deployment
-    - Can run multiple versions simultaneously
+    Deploy a model version and rebuild the live semantic index.
 
     **Args:**
-    - traffic_percentage: % of traffic to route to this model (0-100)
+    - traffic_percentage: must be 100 because the service has one live index
 
     **Returns:**
     - Deployment status
     """
-    if not 0 <= traffic_percentage <= 100:
+    if traffic_percentage != 100:
         raise HTTPException(
             status_code=400,
-            detail="traffic_percentage must be between 0 and 100"
+            detail="DriftCache uses one live FAISS index; deployments must use 100% traffic"
         )
 
     # Get model
@@ -272,22 +280,36 @@ async def deploy_model_version(
     if not model:
         raise HTTPException(status_code=404, detail="Model version not found")
 
-    # Update deployment status
+    try:
+        deployment = await run_in_threadpool(deploy_embedding_model, model.model_name)
+    except Exception as exc:
+        logger.exception("Failed to deploy embedding model %s", version_id)
+        raise HTTPException(status_code=500, detail=f"Model deployment failed: {exc}") from exc
+
+    db.query(ModelVersion).filter(ModelVersion.id != model.id).update(
+        {
+            ModelVersion.is_active: False,
+            ModelVersion.traffic_percentage: 0.0,
+        },
+        synchronize_session=False,
+    )
     model.is_active = True
-    model.traffic_percentage = traffic_percentage
+    model.traffic_percentage = 100.0
     model.deployed_at = datetime.utcnow()
 
     db.commit()
     db.refresh(model)
 
-    logger.info(f"Deployed model {version_id} with {traffic_percentage}% traffic")
+    logger.info("Deployed model %s and rebuilt %s vectors", version_id, deployment.rebuilt_vectors)
 
     return {
         "version_id": version_id,
         "is_active": True,
-        "traffic_percentage": traffic_percentage,
+        "traffic_percentage": 100.0,
+        "embedding_dimension": deployment.dimension,
+        "rebuilt_vectors": deployment.rebuilt_vectors,
         "deployed_at": model.deployed_at,
-        "message": f"Model deployed with {traffic_percentage}% traffic"
+        "message": "Model deployed to all traffic and the FAISS index was rebuilt"
     }
 
 
@@ -309,7 +331,13 @@ async def deactivate_model_version(
     if not model:
         raise HTTPException(status_code=404, detail="Model version not found")
 
-    # Deactivate
+    if model.is_active:
+        raise HTTPException(
+            status_code=409,
+            detail="Deploy another model before deactivating the live embedding model",
+        )
+
+    # Mark an inactive registry entry as deprecated.
     model.is_active = False
     model.traffic_percentage = 0.0
     model.deprecated_at = datetime.utcnow()

@@ -4,11 +4,20 @@ from contextlib import contextmanager
 from unittest.mock import AsyncMock
 
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 from app.metrics.calculator import MetricsCalculator
-from app.models.cache_schemas import CacheStoreResult
+from app.models.cache_entry import CacheEntry
+from app.models.cache_schemas import (
+    CacheDecision,
+    CacheDecisionResult,
+    CachedResponse,
+    CacheStoreResult,
+)
 from app.models.schemas import Message
 from app.models.training_pair import PairType, TrainingPair
+from app.repositories.cache_repo import CacheRepository
 from app.services import cache_recorder as cache_recorder_module
 from app.services.cache_recorder import CacheRecorder
 
@@ -52,6 +61,114 @@ async def test_cache_recorder_uses_assigned_vector_id(monkeypatch):
 
     assert result == "cache-123"
     assert embedding_records[0]["faiss_vector_id"] == 42
+
+
+@pytest.mark.asyncio
+async def test_cache_hit_increments_persistent_entry_counter(monkeypatch):
+    cached_response = CachedResponse(
+        cache_id="cache-hit-123",
+        prompt_text="What is caching?",
+        response_text="Caching stores reusable results.",
+        model_name="test-model",
+        embedding_vector=[],
+    )
+    cache_service = AsyncMock()
+    cache_service.check_cache.return_value = CacheDecisionResult(
+        decision=CacheDecision.HIT,
+        cached_response=cached_response,
+        similarity=0.98,
+        reason="Semantic match",
+    )
+    incremented_cache_ids = []
+
+    class NullQuery:
+        def filter(self, *args):
+            return self
+
+        def order_by(self, *args):
+            return self
+
+        def first(self):
+            return None
+
+    class FakeSession:
+        def query(self, *args):
+            return NullQuery()
+
+        def add(self, value):
+            pass
+
+        def commit(self):
+            pass
+
+    class FakeDatabaseManager:
+        @contextmanager
+        def session_scope(self):
+            yield FakeSession()
+
+    class FakeRequestRepository:
+        def __init__(self, session):
+            pass
+
+        def create(self, **kwargs):
+            return kwargs
+
+    class FakeIndexRepository:
+        def __init__(self, session):
+            pass
+
+        def get_current(self):
+            return None
+
+    class FakeCacheRepository:
+        def __init__(self, session):
+            pass
+
+        def increment_entry_hits(self, cache_id):
+            incremented_cache_ids.append(cache_id)
+            return True
+
+    monkeypatch.setattr(cache_recorder_module, "get_db_manager", FakeDatabaseManager)
+    monkeypatch.setattr(cache_recorder_module, "RequestRepository", FakeRequestRepository)
+    monkeypatch.setattr(cache_recorder_module, "CacheRepository", FakeCacheRepository)
+    monkeypatch.setattr(cache_recorder_module, "get_active_threshold", lambda *args, **kwargs: 0.9)
+    monkeypatch.setattr("app.repositories.index_repo.IndexRepository", FakeIndexRepository)
+
+    recorder = CacheRecorder(cache_service=cache_service)
+    await recorder.check_and_record(
+        messages=[Message(role="user", content="What is caching?")],
+        model_name="test-model",
+        tenant_id="project:test",
+    )
+
+    assert incremented_cache_ids == ["cache-hit-123"]
+
+
+def test_cache_hit_increment_is_persisted():
+    engine = create_engine("sqlite:///:memory:")
+    CacheEntry.__table__.create(engine)
+    session = sessionmaker(bind=engine)()
+    try:
+        entry = CacheEntry(
+            cache_id="cache-123",
+            prompt_text="What is caching?",
+            prompt_hash="hash",
+            response_text="Caching stores reusable results.",
+            model="test-model",
+            tenant_id="project:test",
+        )
+        session.add(entry)
+        session.commit()
+
+        assert CacheRepository(session).increment_entry_hits("cache-123") is True
+        assert CacheRepository(session).increment_entry_hits("cache-123") is True
+        assert CacheRepository(session).increment_entry_hits("missing") is False
+        session.refresh(entry)
+        assert entry.cache_hits == 2
+        assert entry.last_accessed is not None
+    finally:
+        session.close()
+        engine.dispose()
 
 
 class _SimilarityQuery:

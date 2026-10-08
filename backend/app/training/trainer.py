@@ -11,23 +11,26 @@ Uses:
 """
 import logging
 import os
+import random
+from pathlib import Path
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 import uuid
 
+import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from sentence_transformers import (
     SentenceTransformer,
     InputExample,
     losses,
-    evaluation,
 )
-from sentence_transformers.util import batch_to_device
+from sentence_transformers.evaluation import EmbeddingSimilarityEvaluator
 from sqlalchemy.orm import Session
 
 from app.models.training_pair import TrainingPair, PairType
 from app.models.training_job import TrainingJob, JobStatus
+from app.models.model_version import ModelVersion
 from app.models.training_schemas import TrainingConfig
 from app.core.config import settings
 
@@ -81,8 +84,10 @@ class ContrastiveTrainer:
         db: Session,
         batch_size: int = 16,
         max_seq_length: int = 128,
-        loss_function: str = "CosineSimilarityLoss"
-    ) -> DataLoader:
+        loss_function: str = "CosineSimilarityLoss",
+        validation_split: float = 0.2,
+        random_seed: int = 42,
+    ) -> tuple[DataLoader, List[InputExample]]:
         """
         Prepare training data from database
 
@@ -93,7 +98,7 @@ class ContrastiveTrainer:
             loss_function: Loss function to be used (affects data format)
 
         Returns:
-            DataLoader for training
+            Training DataLoader and held-out validation examples
         """
         logger.info("Preparing training data from database")
 
@@ -105,11 +110,8 @@ class ContrastiveTrainer:
 
         logger.info(f"Loaded {len(training_pairs)} training pairs")
 
-        # Convert to InputExample format
-        # NOTE: Different losses require different data formats:
-        # - MultipleNegativesRankingLoss: Only positive pairs (uses in-batch negatives)
-        # - CosineSimilarityLoss/ContrastiveLoss: Both positive and negative pairs with labels
-        train_examples = []
+        positive_examples: List[InputExample] = []
+        negative_examples: List[InputExample] = []
 
         for pair in training_pairs:
             # For positive pairs: (anchor, positive, label=1.0)
@@ -118,20 +120,57 @@ class ContrastiveTrainer:
                     texts=[pair.anchor_text, pair.comparison_text],
                     label=1.0  # Similar
                 )
-                train_examples.append(example)
+                positive_examples.append(example)
 
             # For negative pairs: (anchor, negative, label=0.0)
             # Only include negatives for losses that use explicit negative labels
             elif pair.pair_type in [PairType.HARD_NEGATIVE, PairType.EASY_NEGATIVE]:
-                # Skip negatives for MNRL (it uses in-batch negatives instead)
-                if loss_function != "MultipleNegativesRankingLoss":
-                    example = InputExample(
-                        texts=[pair.anchor_text, pair.comparison_text],
-                        label=0.0  # Dissimilar
-                    )
-                    train_examples.append(example)
+                negative_examples.append(InputExample(
+                    texts=[pair.anchor_text, pair.comparison_text],
+                    label=0.0,
+                ))
 
-        logger.info(f"Created {len(train_examples)} training examples")
+        rng = random.Random(random_seed)
+
+        def split_examples(examples: List[InputExample]) -> tuple[List[InputExample], List[InputExample]]:
+            examples = list(examples)
+            rng.shuffle(examples)
+            if len(examples) < 2:
+                return examples, []
+            validation_count = max(1, round(len(examples) * validation_split))
+            validation_count = min(validation_count, len(examples) - 1)
+            return examples[validation_count:], examples[:validation_count]
+
+        positive_train, positive_validation = split_examples(positive_examples)
+        negative_train, negative_validation = split_examples(negative_examples)
+
+        if loss_function == "MultipleNegativesRankingLoss":
+            train_examples = positive_train
+            # Explicit negatives are not consumed by MNRL, so keep all of them
+            # available for an honest held-out classification evaluation.
+            negative_validation = negative_train + negative_validation
+        else:
+            train_examples = positive_train + negative_train
+            rng.shuffle(train_examples)
+
+        validation_examples = positive_validation + negative_validation
+        rng.shuffle(validation_examples)
+
+        if not train_examples:
+            raise ValueError(
+                "Not enough compatible training pairs. At least two positive pairs are "
+                "required for MultipleNegativesRankingLoss."
+            )
+        if len(validation_examples) < 2:
+            raise ValueError(
+                "At least two held-out pairs are required for validation; collect more training data"
+            )
+
+        logger.info(
+            "Prepared %s training and %s validation examples",
+            len(train_examples),
+            len(validation_examples),
+        )
 
         # Set max sequence length
         self.model.max_seq_length = max_seq_length
@@ -143,7 +182,57 @@ class ContrastiveTrainer:
             batch_size=batch_size
         )
 
-        return train_dataloader
+        return train_dataloader, validation_examples
+
+    def evaluate(
+        self,
+        validation_examples: List[InputExample],
+        threshold: float,
+    ) -> Dict[str, Any]:
+        """Evaluate pair classification on data excluded from training."""
+        anchors = [example.texts[0] for example in validation_examples]
+        comparisons = [example.texts[1] for example in validation_examples]
+        labels = np.asarray([float(example.label) for example in validation_examples])
+
+        anchor_embeddings = self.model.encode(
+            anchors, normalize_embeddings=True, convert_to_numpy=True
+        )
+        comparison_embeddings = self.model.encode(
+            comparisons, normalize_embeddings=True, convert_to_numpy=True
+        )
+        similarities = np.sum(anchor_embeddings * comparison_embeddings, axis=1)
+        predictions = similarities >= threshold
+        positives = labels == 1.0
+        negatives = ~positives
+
+        true_positives = int(np.sum(predictions & positives))
+        false_positives = int(np.sum(predictions & negatives))
+        false_negatives = int(np.sum(~predictions & positives))
+        true_negatives = int(np.sum(~predictions & negatives))
+
+        precision = true_positives / max(true_positives + false_positives, 1)
+        recall = true_positives / max(true_positives + false_negatives, 1)
+        f1 = 2 * precision * recall / max(precision + recall, 1e-12)
+
+        return {
+            "validation_examples": len(validation_examples),
+            "similarity_threshold": threshold,
+            "mean_squared_error": float(np.mean((similarities - labels) ** 2)),
+            "accuracy": float((true_positives + true_negatives) / len(labels)),
+            "precision": float(precision),
+            "recall": float(recall),
+            "f1": float(f1),
+            "true_positives": true_positives,
+            "false_positives": false_positives,
+            "true_negatives": true_negatives,
+            "false_negatives": false_negatives,
+            "avg_similarity_positive": (
+                float(np.mean(similarities[positives])) if np.any(positives) else None
+            ),
+            "avg_similarity_negative": (
+                float(np.mean(similarities[negatives])) if np.any(negatives) else None
+            ),
+        }
 
     def create_loss_function(self, loss_name: str):
         """
@@ -179,6 +268,7 @@ class ContrastiveTrainer:
     def train(
         self,
         train_dataloader: DataLoader,
+        validation_examples: List[InputExample],
         config: TrainingConfig,
         job_id: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -208,10 +298,16 @@ class ContrastiveTrainer:
         logger.info(f"Total training steps: {num_train_steps}")
         logger.info(f"Warmup steps: {warmup_steps}")
 
+        evaluator = EmbeddingSimilarityEvaluator.from_input_examples(
+            validation_examples,
+            name="validation",
+        )
+
         # Train the model
         try:
             self.model.fit(
                 train_objectives=[(train_dataloader, train_loss)],
+                evaluator=evaluator,
                 epochs=config.num_epochs,
                 warmup_steps=warmup_steps,
                 optimizer_params={'lr': config.learning_rate},
@@ -229,6 +325,10 @@ class ContrastiveTrainer:
 
         end_time = datetime.utcnow()
         training_time = (end_time - start_time).total_seconds()
+        eval_metrics = self.evaluate(
+            validation_examples,
+            threshold=settings.SIMILARITY_THRESHOLD,
+        )
 
         # Collect metrics
         metrics = {
@@ -238,6 +338,8 @@ class ContrastiveTrainer:
             "learning_rate": config.learning_rate,
             "batch_size": config.batch_size,
             "loss_function": config.loss_function,
+            "final_loss": eval_metrics["mean_squared_error"],
+            "eval_metrics": eval_metrics,
         }
 
         logger.info(f"Training complete in {training_time:.2f}s")
@@ -405,16 +507,19 @@ class TrainingJobManager:
             config = TrainingConfig(**job.training_config)
 
             # Prepare data
-            train_dataloader = trainer.prepare_training_data(
+            train_dataloader, validation_examples = trainer.prepare_training_data(
                 db=self.db,
                 batch_size=config.batch_size,
                 max_seq_length=config.max_seq_length,
-                loss_function=config.loss_function
+                loss_function=config.loss_function,
+                validation_split=config.validation_split,
+                random_seed=config.random_seed,
             )
 
             # Train
             metrics = trainer.train(
                 train_dataloader=train_dataloader,
+                validation_examples=validation_examples,
                 config=config,
                 job_id=job_id
             )
@@ -429,11 +534,30 @@ class TrainingJobManager:
             job.completed_at = datetime.utcnow()
             job.training_time_seconds = metrics["training_time_seconds"]
             job.num_epochs_completed = config.num_epochs
+            job.final_loss = metrics["final_loss"]
+            job.eval_metrics = metrics["eval_metrics"]
 
             # Store HF Hub URL if uploaded
             if hub_url:
                 job.training_config["huggingface_url"] = hub_url
 
+            model_path = str(Path(output_path).resolve())
+            model_size_bytes = sum(
+                path.stat().st_size for path in Path(model_path).rglob("*") if path.is_file()
+            )
+            model_version = ModelVersion(
+                version_id=f"model-{uuid.uuid4().hex[:12]}",
+                model_name=model_path,
+                base_model=job.base_model,
+                is_finetuned=True,
+                training_job_id=job.job_id,
+                huggingface_url=hub_url,
+                performance_metrics=metrics["eval_metrics"],
+                dimension=trainer.model.get_sentence_embedding_dimension(),
+                model_size_mb=model_size_bytes / (1024 * 1024),
+                description=f"Fine-tuned by training job {job.job_id}",
+            )
+            self.db.add(model_version)
             self.db.commit()
 
             logger.info(f"Training job {job_id} completed successfully")

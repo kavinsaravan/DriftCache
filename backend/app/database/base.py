@@ -20,3 +20,6 @@ def import_models():
     from app.models import threshold_version  # noqa
     from app.models import index_version  # noqa
     from app.models import project  # noqa
+    from app.models import training_pair  # noqa
+    from app.models import training_job  # noqa
+    from app.models import model_version  # noqa

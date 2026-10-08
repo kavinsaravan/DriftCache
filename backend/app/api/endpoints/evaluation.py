@@ -193,7 +193,7 @@ async def replay_batch(
     - Number of MISSes that become HITs
     - Overall impact summary
 
-    This is critical for threshold optimization.
+    This supports manual threshold selection.
     """
     try:
         with get_cache_replayer(session=db) as replayer:
@@ -223,7 +223,7 @@ async def compare_thresholds(
     Use case:
     - Finding optimal threshold value
     - Understanding threshold sensitivity
-    - Supporting agent-driven threshold optimization
+    - Supporting manual threshold selection
 
     Returns the optimal threshold based on hit rate.
     """
@@ -404,7 +404,7 @@ async def get_threshold_trend_analysis(
     Useful for:
     - Finding optimal threshold
     - Understanding precision/recall tradeoff
-    - Supporting autonomous threshold optimization
+    - Supporting manual threshold selection
 
     Args:
         tenant_id: Optional tenant filter
