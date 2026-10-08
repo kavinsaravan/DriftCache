@@ -170,40 +170,6 @@ DriftCache/
 └─────────────┘      └──────────────────┘
 ```
 
-## Core Components
-
-### 1. Semantic Cache Layer
-- **Embedding Service**: Generates vector embeddings from prompts
-- **Vector Store**: Stores and indexes embeddings for fast similarity search
-- **Cache Manager**: Handles cache hits, misses, and TTL
-
-### 2. LLM Integration
-- **Provider Abstraction**: Unified interface for LLM providers (Claude, etc.)
-- **Request/Response Handling**: Manages API calls to LLM providers
-- **Error Handling & Retries**: Resilient LLM communication
-
-### 3. Fine-Tuning Pipeline (PyTorch + Hugging Face)
-- **Training Data Collection**: Mines cache interactions for positive/negative pairs
-- **Contrastive Learning**: PyTorch training with Multiple Negatives Ranking Loss
-- **Model Evaluation**: Precision@K, Recall@K, MRR, NDCG metrics
-- **Model Versioning**: Hugging Face Hub integration for model registry
-
-### 4. Drift Detection & Threshold Analysis
-- **Statistical Drift Detection**: KS-test, Wasserstein distance on similarity distributions
-- **Threshold Evaluation**: Offline analysis tools with multi-objective scoring (precision/recall/cost/latency)
-
-### 5. Data Persistence
-- **PostgreSQL**: Stores metadata, analytics, and configuration
-- **Redis**: Fast in-memory cache for responses and embeddings
-
-### 6. API Layer (FastAPI)
-- **REST Endpoints**: HTTP API for applications
-- **Authentication**: API key management
-
-### 7. Frontend Dashboard (React)
-- **Analytics View**: Cache hit rates, cost savings, latency metrics
-- **Monitoring**: Real-time system health
-
 ## Quick Start
 
 ```bash
