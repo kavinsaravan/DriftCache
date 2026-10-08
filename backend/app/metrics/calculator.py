@@ -6,14 +6,13 @@ Turns raw database logs into useful aggregated metrics
 This is what powers the dashboard visualizations
 """
 import logging
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_
+from sqlalchemy import func
 
 from app.models.cache_event import CacheEvent, CacheStatus
 from app.models.provider_call import ProviderCall
-from app.models.request import Request
 
 logger = logging.getLogger(__name__)
 
@@ -49,9 +48,8 @@ class MetricsCalculator:
                 "cache_hits": 720,
                 "cache_misses": 480,
                 "cache_hit_rate": 0.60,
-                "estimated_cost_saved": 42.73,
-                "average_latency_ms": 310,
-                "total_provider_calls": 480
+                "estimated_cost_saved_usd": 42.73,
+                "calls_avoided": 720
             }
         """
         # Build base query
@@ -78,113 +76,59 @@ class MetricsCalculator:
         # Hit rate
         hit_rate = cache_hits / total_requests if total_requests > 0 else 0.0
 
-        # Average latency
-        avg_latency = self.session.query(
-            func.avg(CacheEvent.latency_ms)
-        ).filter(
-            CacheEvent.latency_ms.isnot(None)
-        )
-
+        cost_query = self.session.query(
+            func.avg(ProviderCall.estimated_cost)
+        ).filter(ProviderCall.estimated_cost.isnot(None))
         if since:
-            avg_latency = avg_latency.filter(CacheEvent.created_at >= since)
+            cost_query = cost_query.filter(ProviderCall.created_at >= since)
         if until:
-            avg_latency = avg_latency.filter(CacheEvent.created_at <= until)
+            cost_query = cost_query.filter(ProviderCall.created_at <= until)
         if tenant_id:
-            avg_latency = avg_latency.filter(CacheEvent.tenant_id == tenant_id)
-
-        avg_latency = avg_latency.scalar() or 0.0
-
-        # Total provider calls
-        provider_query = self.session.query(func.count(ProviderCall.id))
-
-        if since:
-            provider_query = provider_query.filter(ProviderCall.created_at >= since)
-        if until:
-            provider_query = provider_query.filter(ProviderCall.created_at <= until)
-        if tenant_id:
-            provider_query = provider_query.filter(ProviderCall.tenant_id == tenant_id)
-
-        total_provider_calls = provider_query.scalar() or 0
-
-        # Estimated cost saved
-        cost_saved = self._calculate_cost_saved(since, until, tenant_id)
+            cost_query = cost_query.filter(ProviderCall.tenant_id == tenant_id)
+        average_provider_cost = cost_query.scalar() or 0.0
 
         return {
             "total_requests": total_requests,
             "cache_hits": cache_hits,
             "cache_misses": cache_misses,
             "cache_hit_rate": round(hit_rate, 4),
-            "estimated_cost_saved_usd": round(cost_saved, 2),
-            "average_latency_ms": round(avg_latency, 2),
-            "total_provider_calls": total_provider_calls,
-            "calls_avoided": total_requests - total_provider_calls
+            "estimated_cost_saved_usd": round(cache_hits * average_provider_cost, 2),
+            "calls_avoided": cache_hits,
         }
 
-    def calculate_latency_breakdown(
+    def calculate_dashboard_latency(
         self,
         since: Optional[datetime] = None,
         until: Optional[datetime] = None,
-        tenant_id: Optional[str] = None
+        tenant_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """
-        Calculate latency statistics
-
-        Returns cache vs provider latency comparison
-        """
-        # Cache latency (HITs only)
-        cache_latency_query = self.session.query(
-            func.avg(CacheEvent.latency_ms),
-            func.min(CacheEvent.latency_ms),
-            func.max(CacheEvent.latency_ms)
-        ).filter(
+        """Calculate the cache/provider latency comparison used by Dashboard."""
+        cache_query = self.session.query(func.avg(CacheEvent.latency_ms)).filter(
             CacheEvent.cache_status == CacheStatus.HIT,
-            CacheEvent.latency_ms.isnot(None)
+            CacheEvent.latency_ms.isnot(None),
         )
-
-        if since:
-            cache_latency_query = cache_latency_query.filter(CacheEvent.created_at >= since)
-        if until:
-            cache_latency_query = cache_latency_query.filter(CacheEvent.created_at <= until)
-        if tenant_id:
-            cache_latency_query = cache_latency_query.filter(CacheEvent.tenant_id == tenant_id)
-
-        cache_avg, cache_min, cache_max = cache_latency_query.first()
-
-        # Provider latency
-        provider_latency_query = self.session.query(
-            func.avg(ProviderCall.latency_ms),
-            func.min(ProviderCall.latency_ms),
-            func.max(ProviderCall.latency_ms)
-        ).filter(
+        provider_query = self.session.query(func.avg(ProviderCall.latency_ms)).filter(
             ProviderCall.latency_ms.isnot(None)
         )
 
         if since:
-            provider_latency_query = provider_latency_query.filter(ProviderCall.created_at >= since)
+            cache_query = cache_query.filter(CacheEvent.created_at >= since)
+            provider_query = provider_query.filter(ProviderCall.created_at >= since)
         if until:
-            provider_latency_query = provider_latency_query.filter(ProviderCall.created_at <= until)
+            cache_query = cache_query.filter(CacheEvent.created_at <= until)
+            provider_query = provider_query.filter(ProviderCall.created_at <= until)
         if tenant_id:
-            provider_latency_query = provider_latency_query.filter(ProviderCall.tenant_id == tenant_id)
+            cache_query = cache_query.filter(CacheEvent.tenant_id == tenant_id)
+            provider_query = provider_query.filter(ProviderCall.tenant_id == tenant_id)
 
-        provider_avg, provider_min, provider_max = provider_latency_query.first()
-
-        # Calculate speedup
-        speedup = 0.0
-        if cache_avg and provider_avg and provider_avg > 0:
-            speedup = provider_avg / cache_avg
+        cache_average = cache_query.scalar() or 0.0
+        provider_average = provider_query.scalar() or 0.0
+        speedup = provider_average / cache_average if cache_average > 0 else 0.0
 
         return {
-            "cache_latency": {
-                "average_ms": round(cache_avg, 2) if cache_avg else 0.0,
-                "min_ms": round(cache_min, 2) if cache_min else 0.0,
-                "max_ms": round(cache_max, 2) if cache_max else 0.0
-            },
-            "provider_latency": {
-                "average_ms": round(provider_avg, 2) if provider_avg else 0.0,
-                "min_ms": round(provider_min, 2) if provider_min else 0.0,
-                "max_ms": round(provider_max, 2) if provider_max else 0.0
-            },
-            "speedup_factor": round(speedup, 2)
+            "cache_average_ms": round(cache_average, 2),
+            "provider_average_ms": round(provider_average, 2),
+            "speedup_factor": round(speedup, 2),
         }
 
     def calculate_similarity_distribution(
@@ -279,65 +223,6 @@ class MetricsCalculator:
             for entry in entries
         ]
 
-    def calculate_provider_usage(
-        self,
-        since: Optional[datetime] = None,
-        until: Optional[datetime] = None,
-        tenant_id: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Calculate provider usage statistics
-
-        Returns breakdown by provider and model
-        """
-        query = self.session.query(
-            ProviderCall.provider,
-            ProviderCall.model,
-            func.count(ProviderCall.id),
-            func.sum(ProviderCall.total_tokens),
-            func.sum(ProviderCall.estimated_cost)
-        )
-
-        if since:
-            query = query.filter(ProviderCall.created_at >= since)
-        if until:
-            query = query.filter(ProviderCall.created_at <= until)
-        if tenant_id:
-            query = query.filter(ProviderCall.tenant_id == tenant_id)
-
-        query = query.group_by(ProviderCall.provider, ProviderCall.model)
-
-        results = query.all()
-
-        # Aggregate by provider
-        provider_stats = {}
-        for provider, model, count, tokens, cost in results:
-            if provider not in provider_stats:
-                provider_stats[provider] = {
-                    "total_calls": 0,
-                    "total_tokens": 0,
-                    "total_cost_usd": 0.0,
-                    "models": {}
-                }
-
-            provider_stats[provider]["total_calls"] += count
-            provider_stats[provider]["total_tokens"] += tokens or 0
-            provider_stats[provider]["total_cost_usd"] += cost or 0.0
-
-            provider_stats[provider]["models"][model] = {
-                "calls": count,
-                "tokens": tokens or 0,
-                "cost_usd": round(cost or 0.0, 2)
-            }
-
-        # Round totals
-        for provider in provider_stats:
-            provider_stats[provider]["total_cost_usd"] = round(
-                provider_stats[provider]["total_cost_usd"], 2
-            )
-
-        return provider_stats
-
     def calculate_time_series(
         self,
         metric: str,
@@ -350,7 +235,7 @@ class MetricsCalculator:
         Calculate time series data for a metric
 
         Args:
-            metric: "hit_rate", "latency", "requests"
+            metric: "hit_rate" or "requests"
             since: Start time
             until: End time
             interval_minutes: Bucket size
@@ -359,6 +244,9 @@ class MetricsCalculator:
         Returns:
             List of time buckets with metric values
         """
+        if metric not in {"hit_rate", "requests"}:
+            raise ValueError("metric must be 'hit_rate' or 'requests'")
+
         time_series = []
         current = since
 
@@ -369,17 +257,10 @@ class MetricsCalculator:
                 value = self._calculate_hit_rate_for_period(
                     current, bucket_end, tenant_id
                 )
-            elif metric == "latency":
-                value = self._calculate_avg_latency_for_period(
-                    current, bucket_end, tenant_id
-                )
             elif metric == "requests":
                 value = self._calculate_requests_for_period(
                     current, bucket_end, tenant_id
                 )
-            else:
-                value = 0
-
             time_series.append({
                 "timestamp": current.isoformat(),
                 "value": value
@@ -388,50 +269,6 @@ class MetricsCalculator:
             current = bucket_end
 
         return time_series
-
-    def _calculate_cost_saved(
-        self,
-        since: Optional[datetime],
-        until: Optional[datetime],
-        tenant_id: Optional[str]
-    ) -> float:
-        """Calculate estimated cost saved from cache hits"""
-        # Simple estimate: cache hits avoided provider calls
-        # Estimate based on average provider call cost
-
-        # Get average cost per provider call
-        cost_query = self.session.query(
-            func.avg(ProviderCall.estimated_cost)
-        ).filter(
-            ProviderCall.estimated_cost.isnot(None)
-        )
-
-        if since:
-            cost_query = cost_query.filter(ProviderCall.created_at >= since)
-        if until:
-            cost_query = cost_query.filter(ProviderCall.created_at <= until)
-        if tenant_id:
-            cost_query = cost_query.filter(ProviderCall.tenant_id == tenant_id)
-
-        avg_cost = cost_query.scalar() or 0.001  # Default to $0.001 if no data
-
-        # Get cache hit count
-        hit_query = self.session.query(
-            func.count(CacheEvent.id)
-        ).filter(
-            CacheEvent.cache_status == CacheStatus.HIT
-        )
-
-        if since:
-            hit_query = hit_query.filter(CacheEvent.created_at >= since)
-        if until:
-            hit_query = hit_query.filter(CacheEvent.created_at <= until)
-        if tenant_id:
-            hit_query = hit_query.filter(CacheEvent.tenant_id == tenant_id)
-
-        cache_hits = hit_query.scalar() or 0
-
-        return cache_hits * avg_cost
 
     def _calculate_hit_rate_for_period(
         self,
@@ -454,26 +291,6 @@ class MetricsCalculator:
 
         hits = query.filter(CacheEvent.cache_status == CacheStatus.HIT).count()
         return hits / total
-
-    def _calculate_avg_latency_for_period(
-        self,
-        start: datetime,
-        end: datetime,
-        tenant_id: Optional[str]
-    ) -> float:
-        """Calculate average latency for a specific time period"""
-        query = self.session.query(
-            func.avg(CacheEvent.latency_ms)
-        ).filter(
-            CacheEvent.created_at >= start,
-            CacheEvent.created_at < end,
-            CacheEvent.latency_ms.isnot(None)
-        )
-
-        if tenant_id:
-            query = query.filter(CacheEvent.tenant_id == tenant_id)
-
-        return query.scalar() or 0.0
 
     def _calculate_requests_for_period(
         self,

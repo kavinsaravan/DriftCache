@@ -7,12 +7,8 @@ import axios from 'axios';
 import {
   mockDashboardData,
   mockTimeSeriesHitRate,
-  mockTimeSeriesLatency,
   mockTimeSeriesRequests,
-  mockLatencyStats,
-  mockSimilarityDistribution,
-  mockTopCachedPrompts,
-  mockProviderUsage
+  mockTopCachedPrompts
 } from './mockData';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
@@ -31,22 +27,12 @@ export interface MetricsSummary {
   cache_misses: number;
   cache_hit_rate: number;
   estimated_cost_saved_usd: number;
-  average_latency_ms: number;
-  total_provider_calls: number;
   calls_avoided: number;
 }
 
-export interface LatencyStats {
-  cache_latency: {
-    average_ms: number;
-    min_ms: number;
-    max_ms: number;
-  };
-  provider_latency: {
-    average_ms: number;
-    min_ms: number;
-    max_ms: number;
-  };
+export interface DashboardLatency {
+  cache_average_ms: number;
+  provider_average_ms: number;
   speedup_factor: number;
 }
 
@@ -63,21 +49,6 @@ export interface TopCachedPrompt {
   created_at: string;
 }
 
-export interface ProviderUsage {
-  [provider: string]: {
-    total_calls: number;
-    total_tokens: number;
-    total_cost_usd: number;
-    models: {
-      [model: string]: {
-        calls: number;
-        tokens: number;
-        cost_usd: number;
-      };
-    };
-  };
-}
-
 export interface TimeSeriesDataPoint {
   timestamp: string;
   value: number;
@@ -87,66 +58,9 @@ export interface DashboardData {
   period: string;
   generated_at: string;
   summary: MetricsSummary;
-  latency: LatencyStats;
+  latency: DashboardLatency;
   similarity_distribution: SimilarityDistribution;
-  top_cached_prompts: TopCachedPrompt[];
-  provider_usage: ProviderUsage;
 }
-
-/**
- * Get summary metrics
- */
-export const getSummary = async (period: string = '24h', tenantId?: string): Promise<MetricsSummary> => {
-  if (USE_MOCK_DATA) return Promise.resolve(mockDashboardData.summary);
-
-  try {
-    const params: Record<string, string> = { period };
-    if (tenantId) params.tenant_id = tenantId;
-
-    const response = await metricsApi.get('/summary', { params });
-    return response.data;
-  } catch (error) {
-    return Promise.resolve(mockDashboardData.summary);
-  }
-};
-
-/**
- * Get latency statistics
- */
-export const getLatencyStats = async (period: string = '24h', tenantId?: string): Promise<LatencyStats> => {
-  if (USE_MOCK_DATA) return Promise.resolve(mockLatencyStats);
-
-  try {
-    const params: Record<string, string> = { period };
-    if (tenantId) params.tenant_id = tenantId;
-
-    const response = await metricsApi.get('/latency', { params });
-    return response.data;
-  } catch (error) {
-    return Promise.resolve(mockLatencyStats);
-  }
-};
-
-/**
- * Get similarity score distribution
- */
-export const getSimilarityDistribution = async (
-  period: string = '24h',
-  bins: number = 10,
-  tenantId?: string
-): Promise<SimilarityDistribution> => {
-  if (USE_MOCK_DATA) return Promise.resolve(mockSimilarityDistribution);
-
-  try {
-    const params: Record<string, string | number> = { period, bins };
-    if (tenantId) params.tenant_id = tenantId;
-
-    const response = await metricsApi.get('/similarity-distribution', { params });
-    return response.data;
-  } catch (error) {
-    return Promise.resolve(mockSimilarityDistribution);
-  }
-};
 
 /**
  * Get top cached prompts
@@ -170,35 +84,16 @@ export const getTopCachedPrompts = async (
 };
 
 /**
- * Get provider usage statistics
- */
-export const getProviderUsage = async (period: string = '24h', tenantId?: string): Promise<ProviderUsage> => {
-  if (USE_MOCK_DATA) return Promise.resolve(mockProviderUsage);
-
-  try {
-    const params: Record<string, string> = { period };
-    if (tenantId) params.tenant_id = tenantId;
-
-    const response = await metricsApi.get('/provider-usage', { params });
-    return response.data;
-  } catch (error) {
-    return Promise.resolve(mockProviderUsage);
-  }
-};
-
-/**
  * Get time series data
  */
 export const getTimeSeries = async (
-  metric: 'hit_rate' | 'latency' | 'requests',
+  metric: 'hit_rate' | 'requests',
   period: string = '24h',
   interval: string = '1h',
   tenantId?: string
 ): Promise<TimeSeriesDataPoint[]> => {
   if (USE_MOCK_DATA) {
-    const mockData = metric === 'hit_rate' ? mockTimeSeriesHitRate :
-                     metric === 'latency' ? mockTimeSeriesLatency :
-                     mockTimeSeriesRequests;
+    const mockData = metric === 'hit_rate' ? mockTimeSeriesHitRate : mockTimeSeriesRequests;
     return Promise.resolve(mockData);
   }
 
@@ -209,9 +104,7 @@ export const getTimeSeries = async (
     const response = await metricsApi.get(`/time-series/${metric}`, { params });
     return response.data;
   } catch (error) {
-    const mockData = metric === 'hit_rate' ? mockTimeSeriesHitRate :
-                     metric === 'latency' ? mockTimeSeriesLatency :
-                     mockTimeSeriesRequests;
+    const mockData = metric === 'hit_rate' ? mockTimeSeriesHitRate : mockTimeSeriesRequests;
     return Promise.resolve(mockData);
   }
 };
@@ -232,7 +125,7 @@ export const getDashboardData = async (period: string = '24h', tenantId?: string
     const response = await metricsApi.get('/dashboard', { params });
 
     // Validate response has required structure
-    if (!response.data || !response.data.summary || !response.data.latency) {
+    if (!response.data || !response.data.summary) {
       return Promise.resolve(mockDashboardData);
     }
 

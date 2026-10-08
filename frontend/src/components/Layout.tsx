@@ -6,17 +6,11 @@
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
-  BarChart3,
-  Clock,
-  DollarSign,
   Database,
 } from 'lucide-react';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'Cache Analytics', href: '/cache', icon: BarChart3 },
-  { name: 'Latency', href: '/latency', icon: Clock },
-  { name: 'Cost Savings', href: '/cost', icon: DollarSign },
   { name: 'Requests', href: '/requests', icon: Database },
 ];
 

@@ -44,34 +44,14 @@ async def get_metrics_summary(
         "cache_misses": 480,
         "cache_hit_rate": 0.60,
         "estimated_cost_saved_usd": 42.73,
-        "average_latency_ms": 310,
-        "total_provider_calls": 480,
         "calls_avoided": 720
     }
     ```
 
-    This is the key endpoint that proves DriftCache's value!
+    This endpoint supplies the dashboard's cache activity cards.
     """
     with get_metrics_service(session=db) as service:
         return service.get_summary(period=period, tenant_id=_tenant_scope(auth, tenant_id))
-
-
-@router.get("/latency")
-async def get_latency_stats(
-    period: str = Query("24h", description="Time period"),
-    tenant_id: Optional[str] = Query(None, description="Optional tenant filter"),
-    db: Session = Depends(get_db),
-    auth: AuthContext = Depends(verify_metrics_key),
-):
-    """
-    Get latency statistics
-
-    Returns cache vs provider latency comparison
-
-    Shows how much faster cache is than LLM calls
-    """
-    with get_metrics_service(session=db) as service:
-        return service.get_latency_stats(period=period, tenant_id=_tenant_scope(auth, tenant_id))
 
 
 @router.get("/similarity-distribution")
@@ -129,28 +109,6 @@ async def get_top_cached_prompts(
         )
 
 
-@router.get("/provider-usage")
-async def get_provider_usage(
-    period: str = Query("24h", description="Time period"),
-    tenant_id: Optional[str] = Query(None, description="Optional tenant filter"),
-    db: Session = Depends(get_db),
-    auth: AuthContext = Depends(verify_metrics_key),
-):
-    """
-    Get provider usage statistics
-
-    Returns breakdown by provider and model
-
-    Shows:
-    - Total calls per provider
-    - Total tokens used
-    - Total cost per provider
-    - Model-level breakdown
-    """
-    with get_metrics_service(session=db) as service:
-        return service.get_provider_usage(period=period, tenant_id=_tenant_scope(auth, tenant_id))
-
-
 @router.get("/time-series/{metric}")
 async def get_time_series(
     metric: str,
@@ -165,12 +123,11 @@ async def get_time_series(
 
     Metrics:
     - hit_rate: Cache hit rate over time
-    - latency: Average latency over time
     - requests: Request count over time
 
     Used for dashboard charts
     """
-    valid_metrics = ["hit_rate", "latency", "requests"]
+    valid_metrics = ["hit_rate", "requests"]
     if metric not in valid_metrics:
         raise HTTPException(
             status_code=422,
@@ -198,10 +155,8 @@ async def get_dashboard_data(
 
     Returns everything the dashboard needs:
     - Summary metrics
-    - Latency comparison
+    - Cache/provider speedup
     - Similarity distribution
-    - Top cached prompts
-    - Provider usage
 
     This reduces API calls for the frontend
     """
@@ -220,10 +175,8 @@ async def metrics_health(_auth: AuthContext = Depends(verify_metrics_key)):
         "service": "metrics",
         "features": [
             "summary_metrics",
-            "latency_analysis",
+            "dashboard_impact",
             "similarity_distribution",
-            "cost_tracking",
-            "provider_usage",
             "time_series"
         ]
     }

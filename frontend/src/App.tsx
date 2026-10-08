@@ -7,9 +7,6 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
-import CacheAnalytics from './pages/CacheAnalytics';
-import LatencyAnalytics from './pages/LatencyAnalytics';
-import CostSavings from './pages/CostSavings';
 import RequestExplorer from './pages/RequestExplorer';
 
 // Create React Query client
@@ -30,9 +27,6 @@ function App() {
         <Routes>
           <Route path="/" element={<Layout />}>
             <Route index element={<Dashboard />} />
-            <Route path="cache" element={<CacheAnalytics />} />
-            <Route path="latency" element={<LatencyAnalytics />} />
-            <Route path="cost" element={<CostSavings />} />
             <Route path="requests" element={<RequestExplorer />} />
           </Route>
         </Routes>

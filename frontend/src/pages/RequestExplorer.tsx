@@ -93,6 +93,36 @@ export default function RequestExplorer() {
         </div>
       </div>
 
+      {/* Top Cached Prompts */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          Top Cached Prompts
+        </h2>
+        <div className="space-y-4">
+          {requests?.slice(0, 5).map((prompt) => (
+            <div
+              key={prompt.cache_id}
+              className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors"
+            >
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex-1">
+                  <p className="font-medium text-gray-900">{prompt.prompt}</p>
+                  <p className="text-sm text-gray-600 mt-1">{prompt.response}</p>
+                </div>
+                <div className="ml-4 text-right">
+                  <p className="text-2xl font-bold text-blue-600">{prompt.hit_count}</p>
+                  <p className="text-xs text-gray-500">hits</p>
+                </div>
+              </div>
+              <div className="flex items-center text-xs text-gray-500 space-x-4">
+                <span className="px-2 py-1 bg-gray-100 rounded">{prompt.model}</span>
+                <span>{new Date(prompt.created_at).toLocaleDateString()}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Filters */}
       <div className="bg-white rounded-lg shadow p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
