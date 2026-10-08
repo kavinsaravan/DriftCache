@@ -7,11 +7,11 @@ DriftCache is an OpenAI-compatible API proxy that caches semantically similar LL
 ## Key Features
 
 - **Semantic Caching** - Sentence Transformers + FAISS to recognize paraphrased queries beyond exact matches
-- **OpenAI-Compatible Proxy** - Drop-in replacement at `/api/v1/chat/completions`
+- **OpenAI-Compatible Proxy** - Compatible with `/api/v1/chat/completions` and `/api/v1/models` endpoints
 - **Dual Storage Architecture** - Redis for fast retrieval + PostgreSQL for analytics and persistence
 - **Drift Detection** - Statistical monitoring (KS-test, Wasserstein distance) to detect query distribution changes
 - **Fine-Tuning Pipeline** - PyTorch-based contrastive learning to adapt embeddings to domain-specific queries
-- **Threshold Optimization** - Automated search over candidate similarity thresholds with multi-objective scoring
+- **Threshold Evaluation** - Offline utilities for analyzing candidate similarity thresholds with multi-objective scoring
 
 ## Technology Stack
 
@@ -23,7 +23,6 @@ DriftCache is an OpenAI-compatible API proxy that caches semantically similar LL
 | Vector Search | FAISS, sentence-transformers (all-MiniLM-L6-v2) |
 | ML Training | PyTorch 2.2, Sentence Transformers, Hugging Face |
 | Drift Detection | SciPy (KS-test, Wasserstein), NumPy |
-| Agent Orchestration | LangGraph (StateGraph), LangChain (BaseTool) |
 | LLM Providers | OpenAI GPT-4/4o-mini, Anthropic Claude |
 | Infrastructure | Docker, Alembic, SQLAlchemy |
 
@@ -34,19 +33,15 @@ DriftCache/
 ├── backend/
 │   ├── app/
 │   │   ├── api/
-│   │   │   ├── endpoints/           
-│   │   │   │   ├── chat.py         
-│   │   │   │   ├── metrics.py      
-│   │   │   │   ├── training.py     
-│   │   │   │   ├── supervisor.py   
-│   │   │   │   ├── drift.py        
-│   │   │   │   ├── evaluation.py   
-│   │   │   │   ├── vectorstore.py  
-│   │   │   │   └── models.py       
-│   │   │   └── routes.py           
-│   │   ├── agents/                  
-│   │   │   ├── threshold_optimizer.py
-│   │   │   └── langgraph_supervisor.py
+│   │   │   ├── endpoints/
+│   │   │   │   ├── chat.py
+│   │   │   │   ├── metrics.py
+│   │   │   │   ├── training.py
+│   │   │   │   ├── drift.py
+│   │   │   │   ├── evaluation.py
+│   │   │   │   ├── vectorstore.py
+│   │   │   │   └── models.py
+│   │   │   └── routes.py
 │   │   ├── services/
 │   │   │   └── index_maintenance.py
 │   │   ├── providers/
@@ -64,12 +59,15 @@ DriftCache/
 │   │   │   ├── faiss_index.py     
 │   │   │   ├── storage.py          
 │   │   │   └── search.py          
-│   │   ├── embeddings/              
-│   │   │   ├── service.py          
-│   │   │   ├── model.py           
-│   │   │   └── utils.py            
-│   │   ├── optimization/            
-│   │   ├── drift/                  
+│   │   ├── embeddings/
+│   │   │   ├── service.py
+│   │   │   ├── model.py
+│   │   │   └── utils.py
+│   │   ├── optimization/
+│   │   ├── drift/
+│   │   │   ├── schemas.py
+│   │   │   ├── detector.py
+│   │   │   └── service.py
 │   │   ├── evaluation/             
 │   │   ├── metrics/               
 │   │   ├── database/                
@@ -122,8 +120,7 @@ DriftCache/
 │   └── demo.py                    # Maintained demo and smoke runner
 ├── datasets/                      # Canonical benchmark and demo fixtures
 ├── Makefile                       # Development command interface
-├── docker/                          
-├── data/cache/                      
+├── data/cache/
 ├── docker-compose.yml
 └── README.md
 ```
@@ -191,10 +188,9 @@ DriftCache/
 - **Model Evaluation**: Precision@K, Recall@K, MRR, NDCG metrics
 - **Model Versioning**: Hugging Face Hub integration for model registry
 
-### 4. Optimization & Drift Detection
+### 4. Drift Detection & Threshold Analysis
 - **Statistical Drift Detection**: KS-test, Wasserstein distance on similarity distributions
-- **Threshold Optimization**: Grid search with multi-objective scoring (precision/recall/cost/latency)
-- **Remediation Policies**: Rule-based recommendations for threshold adjustments and index rebuilds
+- **Threshold Evaluation**: Offline analysis tools with multi-objective scoring (precision/recall/cost/latency)
 
 ### 5. Data Persistence
 - **PostgreSQL**: Stores metadata, analytics, and configuration
@@ -205,15 +201,14 @@ DriftCache/
 - **Authentication**: API key management
 
 ### 7. Frontend Dashboard (React)
-- **Analytics View**: Cache hit rates, cost savings
-- **Configuration**: Threshold adjustments, model selection
+- **Analytics View**: Cache hit rates, cost savings, latency metrics
 - **Monitoring**: Real-time system health
 
 ## Quick Start
 
 ```bash
 # Clone and setup
-git clone <repository-url>
+git clone https://github.com/kavinsaravan/DriftCache.git
 cd DriftCache
 cp .env.example .env
 # Configure environment variables in .env:
@@ -221,7 +216,8 @@ cp .env.example .env
 # - METRICS_API_KEY: Read-only key for dashboard (optional, recommended)
 # - OPENAI_API_KEY or ANTHROPIC_API_KEY: For LLM provider
 
-# Start with Docker (recommended)
+# Start with Docker
+# Note: Docker configuration may need updates to environment variable names
 make up
 
 # Open dashboard
@@ -249,7 +245,7 @@ For single-user demos, embedding `METRICS_API_KEY` in the frontend is acceptable
 
 ## Integration Guide
 
-DriftCache is **OpenAI-compatible**, making it a drop-in replacement for existing LLM integrations. Just change your `base_url` to start caching responses and reducing costs.
+DriftCache implements **OpenAI-compatible chat completions**, providing a proxy for LLM integrations. Just change your `base_url` to start caching responses and reducing costs.
 
 ### Quick Integration
 
@@ -282,7 +278,7 @@ import OpenAI from 'openai';
 
 const client = new OpenAI({
   baseURL: "http://localhost:8000/api/v1",
-  apiKey: "dummy"
+  apiKey: "your-api-key-here"  // Set API_KEY in backend .env
 });
 
 const response = await client.chat.completions.create({
@@ -301,6 +297,7 @@ console.log(`Cache hit: ${response.cache_hit}`);
 ```bash
 curl http://localhost:8000/api/v1/chat/completions \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-api-key-here" \
   -d '{
     "model": "claude-sonnet-5",
     "messages": [
@@ -310,6 +307,8 @@ curl http://localhost:8000/api/v1/chat/completions \
 ```
 
 ### Framework Integration
+
+**Note:** These examples show using DriftCache as an external client. DriftCache does not depend on LangChain or LlamaIndex internally.
 
 #### LangChain
 
@@ -365,9 +364,9 @@ Request → Embed prompt → FAISS search → Similarity ≥ threshold?
 4. Otherwise, forward to LLM provider and cache the response
 5. All decisions logged to PostgreSQL for drift detection and optimization
 
-**Optimization Pipeline:**
+**Analysis Pipeline:**
 - Drift detector monitors similarity score distributions using KS-test and Wasserstein distance
-- Threshold optimizer evaluates candidate thresholds using multi-objective scoring (precision/recall/cost)
+- Threshold evaluation utilities analyze candidate thresholds using multi-objective scoring (precision/recall/cost)
 - Fine-tuning trainer uses contrastive learning on cached query pairs to improve domain-specific matching
 
 ## API Endpoints
@@ -387,10 +386,8 @@ POST /api/v1/training/models/{version_id}/deploy
 GET  /api/v1/training/stats               # Training statistics
 ```
 
-**Optimization & Monitoring:**
+**Monitoring:**
 ```bash
-POST /api/v1/supervisor/run        # Run threshold optimization workflow
-GET  /api/v1/supervisor/runs       # Optimization history
 GET  /api/v1/metrics/summary       # Hit rate, latency, cost savings
 GET  /api/v1/drift/latest          # Latest drift alert
 GET  /api/v1/benchmark/summary     # Benchmark results
@@ -406,8 +403,7 @@ DriftCache includes a complete fine-tuning pipeline to adapt the embedding model
 ```bash
 POST /api/v1/training/collect-data
 ```
-- Automatically mines cache interactions
-- Generates positive pairs (high similarity, cache hits)
+- Generates positive pairs based on embedding similarity scores
 - Generates hard negatives (medium similarity, shouldn't match)
 - Generates easy negatives (random dissimilar queries)
 
@@ -432,48 +428,30 @@ POST /api/v1/training/jobs
 
 See [FINE_TUNING_IMPLEMENTATION.md](FINE_TUNING_IMPLEMENTATION.md) for detailed documentation.
 
-## Optimization System
+## Drift Detection
 
-**LangGraph-Powered Remediation:**
+DriftCache monitors semantic distribution changes using statistical methods:
 
-Built with **LangGraph StateGraph** for stateful workflow orchestration:
+**Detection Method:**
+- Compares recent cache similarity scores against a reference baseline
+- Uses multiple statistical tests:
+  - **Kolmogorov-Smirnov test**: Detects distribution shifts (p-value threshold)
+  - **Wasserstein distance**: Measures how far distributions have moved
+  - **Mean shift**: Tracks average similarity score changes
+  - **Variance ratio**: Monitors spread changes in similarity scores
+- Requires minimum sample sizes (50 reference, 30 recent) for reliable detection
 
-### Architecture
+**Output:**
+- Drift severity classification (no_drift, moderate_drift, high_drift)
+- Statistical metrics and confidence levels
+- Drift alert logging to PostgreSQL for historical analysis
 
-```
-┌─────────────────────────────────────────────┐
-│         LangGraph StateGraph                │
-│                                             │
-│  load_system_state → diagnose → recommend  │
-│         ↓                                   │
-│    execute_action ←─┐                       │
-│         ↓           │ (conditional loop)    │
-│  validate_action ───┘                       │
-│         ↓                                   │
-│     finalize → END                          │
-└─────────────────────────────────────────────┘
-```
+**What it does NOT do:**
+- Does not automatically adjust similarity thresholds
+- Does not trigger remediation workflows
+- Does not modify cache configuration
 
-### Workflow Steps
-
-1. **load_system_state** - Query drift, quality, and metrics tools (LangChain BaseTool)
-2. **diagnose** - Classify system into 8 health categories (healthy, low precision, high drift, stale index, etc.)
-3. **recommend** - Map diagnosis to remediation actions using policy rules
-4. **execute_action** - Optimize the threshold or run live index maintenance
-5. **validate_action** - Check if metrics improved (precision, recall, false hit rate)
-6. **Conditional routing** - Continue with more actions or finalize based on validation
-
-All state transitions managed by LangGraph with full audit trail stored in PostgreSQL.
-
-**Threshold Optimization:**
-- Grid search over candidate thresholds (e.g., [0.75, 0.80, 0.85, 0.90, 0.95, 0.98])
-- Multi-objective scoring: precision (45%), recall (25%), cost savings (20%), latency (10%)
-- Safety constraints: never lower precision below 85%, penalize false hits 2x
-
-**Drift Detection:**
-- Compares recent vs. reference embedding distributions using SciPy
-- Metrics: centroid shift (cosine distance), variance shift, KS-test p-value, Wasserstein distance
-- Triggers optimization when drift severity reaches threshold
+Access via `GET /api/v1/drift/latest` to view current drift status.
 
 
 ## Performance Metrics
