@@ -446,11 +446,6 @@ DriftCache monitors semantic distribution changes using statistical methods:
 - Statistical metrics and confidence levels
 - Drift alert logging to PostgreSQL for historical analysis
 
-**What it does NOT do:**
-- Does not automatically adjust similarity thresholds
-- Does not trigger remediation workflows
-- Does not modify cache configuration
-
 Access via `GET /api/v1/drift/latest` to view current drift status.
 
 
