@@ -26,42 +26,50 @@ DriftCache is an OpenAI-compatible API proxy that caches semantically similar LL
 | LLM Providers | OpenAI GPT-4/4o-mini, Anthropic Claude |
 | Infrastructure | Docker, Alembic, SQLAlchemy |
 
-
-```
-
 ## High-Level Architecture
 
-```mermaid
-flowchart TD
-    App[AI application] -->|OpenAI-compatible request + project API key| API[FastAPI gateway]
-    API --> Auth[Authentication and tenant isolation]
-    Auth --> Embed[Sentence-transformer embedding]
-    Embed --> Search[FAISS similarity search]
-    Search --> Decision{Similarity above threshold?}
-
-    Decision -->|Yes| Redis[(Redis hot cache)]
-    Redis -->|Cached completion| API
-
-    Decision -->|No| Provider[OpenAI or Anthropic]
-    Provider -->|Generated completion| Store[Cache response]
-    Store --> Redis
-    Store --> Search
-    Provider --> API
-
-    API --> Events[(PostgreSQL)]
-    Store --> Events
-
-    Events --> Analytics[Metrics and cost analytics]
-    Events --> Drift[Statistical drift detection]
-    Events --> Training[Validated pair generation and fine-tuning]
-    Training --> Registry[Model versions]
-    Registry -->|Deploy model and rebuild vectors| Embed
 ```
-
-Redis serves cached responses, FAISS finds semantically similar prompts, and
-PostgreSQL stores durable request, cache, provider, and model-version metadata.
-On a miss, DriftCache forwards the request to the configured LLM provider and
-stores the resulting response for later semantic reuse.
+┌─────────────┐
+│ Application │
+└──────┬──────┘
+       │
+       ▼
+┌─────────────────────────────────────────────┐
+│         DriftCache API                      │
+│  ┌─────────────────────────────────────┐   │
+│  │   Semantic Cache Layer              │   │
+│  │  - Embedding Generation             │   │
+│  │  - Vector Similarity Search         │   │
+│  │  - Cache Hit/Miss Logic             │   │
+│  └─────────────────────────────────────┘   │
+│                                            │
+│  ┌─────────────────────────────────────┐   │
+│  │  Fine-Tuning Pipeline               │   │
+│  │  - Training Data Collection         │   │
+│  │  - PyTorch Contrastive Learning     │   │
+│  │  - Model Evaluation & Versioning    │   │
+│  └─────────────────────────────────────┘   │
+│                                            │
+│  ┌─────────────────────────────────────┐   │
+│  │  Evaluation & Monitoring            │   │
+│  │  - Drift Detection (SciPy stats)    │   │
+│  │  - Offline Threshold Analysis       │   │
+│  │  - Performance Analytics            │   │
+│  └─────────────────────────────────────┘   │
+└─────────────────────────────────────────────┘
+       │                    │
+       ▼                    ▼
+┌─────────────┐      ┌─────────────┐
+│ PostgreSQL  │      │   Redis     │
+│ (Metadata)  │      │  (Cache)    │
+└─────────────┘      └─────────────┘
+       │
+       ▼
+┌─────────────┐      ┌──────────────────┐
+│   Claude    │      │ Hugging Face Hub │
+│   (LLM)     │      │ (Model Registry) │
+└─────────────┘      └──────────────────┘
+```
 
 ## Quick Start
 
