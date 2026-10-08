@@ -1,5 +1,6 @@
-"""
-Drift Detection Module
+"""Similarity-score drift monitoring."""
 
-Monitors semantic drift in embedding distributions over time
-"""
+from app.drift.detector import SimilarityDriftDetector
+from app.drift.schemas import DriftConfig, DriftReport, SimilaritySamples
+
+__all__ = ["DriftConfig", "DriftReport", "SimilarityDriftDetector", "SimilaritySamples"]

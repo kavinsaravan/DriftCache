@@ -14,8 +14,6 @@ hiredis==2.3.2
 
 # LLM & AI
 anthropic>=0.40.0
-langchain==0.1.6
-langgraph==0.0.20
 openai>=1.50.0
 
 # Vector/Embeddings

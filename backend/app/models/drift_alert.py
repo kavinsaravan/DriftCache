@@ -3,7 +3,7 @@ Drift Alert Model
 
 Tracks semantic drift detection results over time
 """
-from sqlalchemy import Column, Integer, Float, String, DateTime, Boolean, Text
+from sqlalchemy import Column, Integer, Float, String, DateTime, Boolean, Text, JSON
 from sqlalchemy.sql import func
 from app.database.base import Base
 
@@ -12,8 +12,8 @@ class DriftAlert(Base):
     """
     Records drift detection results
 
-    Tracks when embedding distributions shift, indicating semantic changes
-    in user prompt patterns that may reduce cache effectiveness
+    Tracks shifts in cache-similarity distributions that may indicate
+    changing traffic or matching behavior
     """
     __tablename__ = "drift_alerts"
 
@@ -28,6 +28,9 @@ class DriftAlert(Base):
     centroid_shift = Column(Float, nullable=False)
     variance_shift = Column(Float, nullable=False)
     ks_p_value = Column(Float, nullable=True)  # Kolmogorov-Smirnov test p-value
+    wasserstein_distance = Column(Float, nullable=True)
+    drift_detected = Column(Boolean, nullable=False, default=False, index=True)
+    reasons = Column(JSON, nullable=True)
 
     # Similarity metrics
     avg_similarity_recent = Column(Float, nullable=True)

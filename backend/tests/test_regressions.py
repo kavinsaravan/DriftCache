@@ -5,35 +5,12 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.api.endpoints import agents as agents_endpoint
 from app.metrics.calculator import MetricsCalculator
 from app.models.cache_schemas import CacheStoreResult
 from app.models.schemas import Message
 from app.models.training_pair import PairType, TrainingPair
 from app.services import cache_recorder as cache_recorder_module
 from app.services.cache_recorder import CacheRecorder
-
-
-def test_cache_maintenance_endpoint_constructs_workflow_without_db_argument(monkeypatch):
-    class FakeState:
-        def to_dict(self):
-            return {"workflow_status": "completed"}
-
-        def get_summary(self):
-            return "completed"
-
-    class FakeWorkflow:
-        def __init__(self):
-            pass
-
-        def run(self, trigger_type, tenant_id):
-            return FakeState()
-
-    monkeypatch.setattr(agents_endpoint, "CacheMaintenanceWorkflow", FakeWorkflow)
-
-    response = agents_endpoint.run_cache_maintenance(tenant_id="tenant-a")
-
-    assert response == {"workflow_status": "completed", "summary": "completed"}
 
 
 @pytest.mark.asyncio
