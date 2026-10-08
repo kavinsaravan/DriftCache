@@ -26,6 +26,8 @@ from app.models.schemas import (
     ErrorDetail,
 )
 from app.providers.router import provider_router
+from app.core.auth import verify_api_key
+from app.services.api_keys import AuthContext
 from app.services.streaming import StreamCollector, create_cached_stream
 from app.services.cache_recorder import get_cache_recorder
 from app.utils.cost_calculator import calculate_cost
@@ -37,7 +39,8 @@ cache_recorder = get_cache_recorder()
 
 @router.post("/chat/completions", response_model=None)
 async def create_chat_completion(
-    request: ChatCompletionRequest
+    request: ChatCompletionRequest,
+    auth: AuthContext = Depends(verify_api_key),
 ) -> Union[ChatCompletionResponse, StreamingResponse]:
     """
     OpenAI-compatible chat completion endpoint
@@ -72,6 +75,8 @@ async def create_chat_completion(
             request_id, cache_result = await cache_recorder.check_and_record(
                 messages=request.messages,
                 model_name=request.model,
+                tenant_id=auth.tenant_id,
+                user_id=request.user,
                 stream=True
             )
 
@@ -140,6 +145,8 @@ async def create_chat_completion(
                         messages=request.messages,
                         response_text=response.content,
                         model_name=request.model,
+                        tenant_id=auth.tenant_id,
+                        user_id=request.user,
                         provider=provider_router.get_provider_for_model(request.model),
                         input_tokens=input_tokens,  # Estimated
                         output_tokens=output_tokens,  # Estimated
@@ -189,6 +196,8 @@ async def create_chat_completion(
             request_id, cache_result = await cache_recorder.check_and_record(
                 messages=request.messages,
                 model_name=request.model,
+                tenant_id=auth.tenant_id,
+                user_id=request.user,
                 stream=False
             )
 
@@ -252,6 +261,8 @@ async def create_chat_completion(
                     messages=request.messages,
                     response_text=response_text,
                     model_name=request.model,
+                    tenant_id=auth.tenant_id,
+                    user_id=request.user,
                     provider=provider_router.get_provider_for_model(request.model),
                     input_tokens=response.usage.prompt_tokens if response.usage else None,
                     output_tokens=response.usage.completion_tokens if response.usage else None,

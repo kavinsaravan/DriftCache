@@ -212,7 +212,7 @@ git clone https://github.com/kavinsaravan/DriftCache.git
 cd DriftCache
 cp .env.example .env
 # Configure environment variables in .env:
-# - API_KEY: Main API key for chat/completions (required)
+# - API_KEY: Bootstrap administrator key used to provision project keys
 # - METRICS_API_KEY: Read-only key for dashboard (optional, recommended)
 # - OPENAI_API_KEY or ANTHROPIC_API_KEY: For LLM provider
 
@@ -237,6 +237,30 @@ make benchmark
 Use `API_BASE_URL=https://your-host` for a remote API and export
 `DRIFTCACHE_API_KEY` when authentication is enabled.
 
+### Create a project key
+
+Use the bootstrap `API_KEY` to create one isolated project credential for each
+application integrating with DriftCache:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/projects \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Support assistant","key_name":"production"}'
+```
+
+The response contains a `dc_live_...` key exactly once. Store it in the client
+application's secret manager as `DRIFTCACHE_API_KEY`. DriftCache stores only its
+SHA-256 hash and derives the project's cache namespace from the verified key.
+The bootstrap key can list projects, create additional keys, and revoke keys:
+
+```text
+GET    /api/v1/projects
+POST   /api/v1/projects/{project_id}/keys
+GET    /api/v1/projects/{project_id}/keys
+DELETE /api/v1/projects/{project_id}/keys/{api_key_id}
+```
+
 **Security Note:** The dashboard uses `METRICS_API_KEY` (read-only) instead of the main `API_KEY`. This prevents write operations but still exposes:
 - Cached prompts via `/metrics/top-cached-prompts`
 - Performance data for any `tenant_id`
@@ -252,12 +276,13 @@ DriftCache implements **OpenAI-compatible chat completions**, providing a proxy 
 #### Python (OpenAI SDK)
 
 ```python
+import os
 from openai import OpenAI
 
 # Just point to DriftCache instead of OpenAI
 client = OpenAI(
     base_url="http://localhost:8000/api/v1",
-    api_key="your-api-key-here"  # Set API_KEY in backend .env
+    api_key=os.environ["DRIFTCACHE_API_KEY"]
 )
 
 response = client.chat.completions.create(
@@ -278,7 +303,7 @@ import OpenAI from 'openai';
 
 const client = new OpenAI({
   baseURL: "http://localhost:8000/api/v1",
-  apiKey: "your-api-key-here"  // Set API_KEY in backend .env
+  apiKey: process.env.DRIFTCACHE_API_KEY
 });
 
 const response = await client.chat.completions.create({
