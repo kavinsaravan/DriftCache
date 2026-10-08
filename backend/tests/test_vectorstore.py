@@ -25,6 +25,15 @@ def test_faiss_index_creation():
     assert len(index) == 0
 
 
+@pytest.mark.parametrize("index_type", ["IVF", "HNSW"])
+def test_unsupported_faiss_index_types_fail_fast(index_type):
+    """Unsupported indexes must not start with incompatible ID semantics."""
+    index = FAISSIndex(dimension=384, index_type=index_type)
+
+    with pytest.raises(ValueError, match="only Flat"):
+        index.create_index()
+
+
 def test_faiss_add_vectors():
     """Test adding vectors to FAISS"""
     index = FAISSIndex(dimension=384)

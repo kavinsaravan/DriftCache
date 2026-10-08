@@ -21,6 +21,7 @@ from app.models.cache_schemas import (
     CacheDecision,
     CacheDecisionResult,
     CachedResponse,
+    CacheStoreResult,
     CacheConfig,
     CacheKey,
 )
@@ -281,7 +282,7 @@ class CacheService:
         user_id: Optional[str] = None,
         ttl_seconds: Optional[int] = None,
         request_params: Optional[dict] = None
-    ) -> str:
+    ) -> CacheStoreResult:
         """
         Store a new LLM response in cache
 
@@ -302,7 +303,7 @@ class CacheService:
             request_params: Optional request parameters
 
         Returns:
-            cache_id of stored response
+            Cache and vector identifiers for the stored response
         """
         # Ensure Redis store is initialized
         if self.redis_store is None:
@@ -351,7 +352,7 @@ class CacheService:
         )
 
         # Add to FAISS vector index
-        self.search_service.add_to_index(
+        vector_id = self.search_service.add_to_index(
             embedding=embedding,
             response_text=response_text,
             model_name=model_name,
@@ -382,7 +383,7 @@ class CacheService:
             f"ttl={ttl}s, stored=[redis+faiss{'+disk' if should_save else ''}]"
         )
 
-        return cache_id
+        return CacheStoreResult(cache_id=cache_id, vector_id=vector_id)
 
     def _extract_cache_key(
         self,

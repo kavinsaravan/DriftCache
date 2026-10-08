@@ -20,7 +20,6 @@ router = APIRouter()
 def run_cache_maintenance(
     trigger_type: str = "manual",
     tenant_id: Optional[str] = None,
-    db: Session = Depends(get_db)
 ):
     """
     Trigger cache maintenance workflow
@@ -75,7 +74,7 @@ def run_cache_maintenance(
     """
     try:
         # Create and run workflow
-        workflow = CacheMaintenanceWorkflow(db_session=db)
+        workflow = CacheMaintenanceWorkflow()
         state = workflow.run(trigger_type=trigger_type, tenant_id=tenant_id)
 
         # Return structured response

@@ -1,7 +1,7 @@
 """
 Application configuration
 """
-from typing import List
+from typing import List, Literal
 from pydantic_settings import BaseSettings
 from pydantic import Field
 
@@ -95,7 +95,10 @@ class Settings(BaseSettings):
     ENABLE_TRAINING: bool = Field(default=True, description="Enable fine-tuning capabilities")
 
     # Vector Search
-    VECTOR_INDEX_TYPE: str = Field(default="FLAT")  # FLAT, IVF, HNSW
+    VECTOR_INDEX_TYPE: Literal["FLAT"] = Field(
+        default="FLAT",
+        description="FAISS index type; only FLAT currently preserves required stable IDs",
+    )
 
     # Storage Paths (relative to project root)
     INDEX_STORAGE_DIR: str = Field(default="data/cache")

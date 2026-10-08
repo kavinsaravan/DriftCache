@@ -89,6 +89,13 @@ class CachedResponse(BaseModel):
         self.last_accessed = datetime.utcnow()
 
 
+class CacheStoreResult(BaseModel):
+    """Identifiers created when a response is stored in the cache."""
+
+    cache_id: str
+    vector_id: int
+
+
 class CacheDecisionResult(BaseModel):
     """
     Result of cache decision

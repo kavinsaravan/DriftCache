@@ -217,21 +217,26 @@ class MetricsCalculator:
 
         scores = [s[0] for s in query.all()]
 
+        if bins <= 0:
+            raise ValueError("bins must be greater than zero")
+
         if not scores:
             return {}
 
-        # Create histogram
-        min_score = max(0.0, min(scores))
-        max_score = min(1.0, max(scores))
-        bin_width = (max_score - min_score) / bins
+        # Use fixed [0, 1] buckets so distributions are comparable across
+        # periods. Clamp out-of-range historical data, and include 1.0 in the
+        # final bucket.
+        bin_width = 1.0 / bins
+        counts = [0] * bins
+        for score in scores:
+            clamped_score = max(0.0, min(1.0, score))
+            bucket = min(int(clamped_score * bins), bins - 1)
+            counts[bucket] += 1
 
         distribution = {}
-        for i in range(bins):
-            bin_min = min_score + (i * bin_width)
-            bin_max = bin_min + bin_width
-            count = sum(1 for s in scores if bin_min <= s < bin_max)
-
-            # Format bin label
+        for i, count in enumerate(counts):
+            bin_min = i * bin_width
+            bin_max = (i + 1) * bin_width
             label = f"{bin_min:.2f}-{bin_max:.2f}"
             distribution[label] = count
 
