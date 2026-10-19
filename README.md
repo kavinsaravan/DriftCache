@@ -338,23 +338,3 @@ DriftCache monitors semantic distribution changes using statistical methods:
 - Drift alert logging to PostgreSQL for historical analysis
 
 Access via `GET /api/v1/drift/latest` to view current drift status.
-
-
-## Performance Metrics
-
-Evaluation results on 140 labeled test pairs (semantic duplicates + hard negatives):
-
-| Similarity Threshold | Precision | Recall | F1 Score | Use Case |
-|---------------------|-----------|--------|----------|----------|
-| **0.85** (Balanced) | **97.5%** | **55.7%** | **70.9%** | Production default - high safety with good coverage |
-| **0.90** (Conservative) | **100%** | **31.4%** | **47.8%** | Maximum safety - zero wrong answers |
-| 0.92 | 100% | 20.0% | 33.3% | Ultra-conservative |
-| 0.95 | 100% | 5.7% | 10.8% | Near-exact match only |
-
-**Key Insights:**
-- **Precision**: Accuracy of cache hits (% of cached responses that are correct)
-- **Recall**: Coverage (% of matching pairs successfully cached at this threshold)
-- **Trade-off**: Higher thresholds = safer but less coverage; lower thresholds = more coverage but higher risk
-- **Testing method**: Pair-wise similarity on labeled data (not full cache simulation)
-
-At 0.85, precision of 97.5% means 1 questionable hit out of 40 on this test set.
