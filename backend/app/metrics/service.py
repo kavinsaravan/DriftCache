@@ -45,6 +45,40 @@ class MetricsService:
         if self._owns_session and self.session:
             self.session.close()
 
+    def get_request_history(
+        self, limit: int = 100, offset: int = 0, period: str = "24h",
+        tenant_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        from sqlalchemy import and_
+        from app.models.request import Request
+        from app.models.cache_event import CacheEvent
+
+        query = self.session.query(CacheEvent, Request.prompt_text).join(
+            Request,
+            and_(Request.request_id == CacheEvent.request_id,
+                 Request.tenant_id == CacheEvent.tenant_id),
+        ).filter(CacheEvent.created_at >= self._parse_period(period))
+        if tenant_id is not None:
+            query = query.filter(CacheEvent.tenant_id == tenant_id)
+        total = query.count()
+        rows = query.order_by(CacheEvent.created_at.desc(), CacheEvent.id.desc()).offset(offset).limit(limit).all()
+        return {
+            "total": total,
+            "items": [
+                {
+                    "event_id": event.id,
+                    "request_id": event.request_id,
+                    "prompt": prompt,
+                    "model": event.model,
+                    "status": event.cache_status.value,
+                    "similarity": event.similarity_score,
+                    "latency_ms": event.latency_ms,
+                    "created_at": event.created_at.isoformat(),
+                }
+                for event, prompt in rows
+            ],
+        }
+
     def get_summary(
         self,
         period: str = "24h",

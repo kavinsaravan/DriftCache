@@ -12,7 +12,7 @@ import {
 } from './mockData';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
-const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA === 'true';
+export const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA === 'true';
 
 const metricsApi = axios.create({
   baseURL: `${API_BASE_URL}/metrics`,
@@ -20,6 +20,26 @@ const metricsApi = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+// User-supplied credentials remain scoped to this browser tab, never the build.
+const KEY_STORAGE = 'driftcache.metrics-key';
+export const getMetricsKey = (): string => sessionStorage.getItem(KEY_STORAGE) || '';
+export const setMetricsKey = (key: string): void => {
+  if (key.trim()) sessionStorage.setItem(KEY_STORAGE, key.trim());
+  else sessionStorage.removeItem(KEY_STORAGE);
+};
+metricsApi.interceptors.request.use((config) => {
+  const key = getMetricsKey();
+  if (key) config.headers.set('Authorization', `Bearer ${key}`);
+  return config;
+});
+
+export const getMetricsError = (error: unknown): string => {
+  if (axios.isAxiosError(error) && [401, 403].includes(error.response?.status || 0)) {
+    return 'Access denied. Enter a valid metrics or project API key above.';
+  }
+  return 'Unable to load data. Check the API connection and try again.';
+};
 
 export interface MetricsSummary {
   total_requests: number;
@@ -62,77 +82,63 @@ export interface DashboardData {
   similarity_distribution: SimilarityDistribution;
 }
 
-/**
- * Get top cached prompts
- */
+export interface RequestEvent {
+  event_id: number;
+  request_id: string;
+  prompt: string;
+  model: string;
+  status: string;
+  similarity: number | null;
+  latency_ms: number | null;
+  created_at: string;
+}
+
+export interface RequestHistory {
+  total: number;
+  items: RequestEvent[];
+}
+
 export const getTopCachedPrompts = async (
-  limit: number = 10,
-  period: string = '24h',
-  tenantId?: string
+  limit = 10, period = '24h', tenantId?: string
 ): Promise<TopCachedPrompt[]> => {
-  if (USE_MOCK_DATA) return Promise.resolve(mockTopCachedPrompts);
-
-  try {
-    const params: Record<string, string | number> = { limit, period };
-    if (tenantId) params.tenant_id = tenantId;
-
-    const response = await metricsApi.get('/top-cached-prompts', { params });
-    return response.data;
-  } catch (error) {
-    return Promise.resolve(mockTopCachedPrompts);
-  }
+  if (USE_MOCK_DATA) return mockTopCachedPrompts.slice(0, limit);
+  const response = await metricsApi.get('/top-cached-prompts', {
+    params: { limit, period, tenant_id: tenantId },
+  });
+  return response.data;
 };
 
-/**
- * Get time series data
- */
 export const getTimeSeries = async (
-  metric: 'hit_rate' | 'requests',
-  period: string = '24h',
-  interval: string = '1h',
-  tenantId?: string
+  metric: 'hit_rate' | 'requests', period = '24h', interval = '1h', tenantId?: string
 ): Promise<TimeSeriesDataPoint[]> => {
-  if (USE_MOCK_DATA) {
-    const mockData = metric === 'hit_rate' ? mockTimeSeriesHitRate : mockTimeSeriesRequests;
-    return Promise.resolve(mockData);
-  }
-
-  try {
-    const params: Record<string, string> = { period, interval };
-    if (tenantId) params.tenant_id = tenantId;
-
-    const response = await metricsApi.get(`/time-series/${metric}`, { params });
-    return response.data;
-  } catch (error) {
-    const mockData = metric === 'hit_rate' ? mockTimeSeriesHitRate : mockTimeSeriesRequests;
-    return Promise.resolve(mockData);
-  }
+  if (USE_MOCK_DATA) return metric === 'hit_rate' ? mockTimeSeriesHitRate : mockTimeSeriesRequests;
+  const response = await metricsApi.get(`/time-series/${metric}`, {
+    params: { period, interval, tenant_id: tenantId },
+  });
+  return response.data;
 };
 
-/**
- * Get complete dashboard data in one call
- */
-export const getDashboardData = async (period: string = '24h', tenantId?: string): Promise<DashboardData> => {
-  // Use mock data if enabled or if backend fails
+export const getDashboardData = async (period = '24h', tenantId?: string): Promise<DashboardData> => {
+  if (USE_MOCK_DATA) return mockDashboardData;
+  const response = await metricsApi.get('/dashboard', { params: { period, tenant_id: tenantId } });
+  if (!response.data?.summary || !response.data?.latency || !response.data?.similarity_distribution) {
+    throw new Error('Invalid dashboard response');
+  }
+  return response.data;
+};
+
+export const getRequestHistory = async (offset = 0, limit = 100): Promise<RequestHistory> => {
   if (USE_MOCK_DATA) {
-    return Promise.resolve(mockDashboardData);
+    const items = mockTopCachedPrompts.map((prompt, index) => ({
+      event_id: index + 1, request_id: `demo-${index + 1}`,
+      prompt: prompt.prompt, model: prompt.model, created_at: prompt.created_at,
+      status: index % 2 ? 'MISS' : 'HIT', similarity: index % 2 ? 0.5 : 0.95,
+      latency_ms: 12,
+    }));
+    return { total: items.length, items: items.slice(offset, offset + limit) };
   }
-
-  try {
-    const params: Record<string, string> = { period };
-    if (tenantId) params.tenant_id = tenantId;
-
-    const response = await metricsApi.get('/dashboard', { params });
-
-    // Validate response has required structure
-    if (!response.data || !response.data.summary) {
-      return Promise.resolve(mockDashboardData);
-    }
-
-    return response.data;
-  } catch (error) {
-    return Promise.resolve(mockDashboardData);
-  }
+  const response = await metricsApi.get('/requests', { params: { offset, limit, period: '24h' } });
+  return response.data;
 };
 
 export default metricsApi;

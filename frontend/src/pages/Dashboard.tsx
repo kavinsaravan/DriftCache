@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import {
   getDashboardData,
+  getMetricsError,
   getTimeSeries,
   DashboardData,
   TimeSeriesDataPoint,
@@ -62,7 +63,7 @@ export default function Dashboard() {
   if (error || hitRateError) {
     return (
       <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-        <p className="text-red-800">Failed to load metrics. Please check if backend is running.</p>
+        <p className="text-red-800">{getMetricsError(error || hitRateError)}</p>
       </div>
     );
   }

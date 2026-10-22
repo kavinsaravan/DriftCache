@@ -127,13 +127,55 @@ GET    /api/v1/projects/{project_id}/keys
 DELETE /api/v1/projects/{project_id}/keys/{api_key_id}
 ```
 
-**Security Note:** The dashboard uses `METRICS_API_KEY` (read-only) instead of the main `API_KEY`. This prevents write operations but still exposes:
-- Cached prompts via `/metrics/top-cached-prompts`
-- Performance data for any `tenant_id`
+### Dashboard authentication and request history
 
-For single-user demos, embedding `METRICS_API_KEY` in the frontend is acceptable. For production multi-tenant deployments, implement server-side rendering or a backend proxy to keep all keys secure. Set both keys in your backend `.env` file.
+Enter a read-only `METRICS_API_KEY` or a project API key in the dashboard's
+**Metrics or project API key** field, then select **Apply key**. The key is stored
+only in the current tab's session storage and sent as a Bearer token. Do not put
+an administrator key into frontend build variables. Changing or clearing the key
+resets cached dashboard queries. A project key can see only its own tenant;
+the shared metrics key sees the default tenant.
+
+Request Explorer reads individual cache decisions, including misses, from
+`GET /api/v1/metrics/requests?limit=100&offset=0&period=24h`. Results are paginated,
+newest first; search and status filters apply to the displayed page. CSV export
+uses the displayed events. API errors are shown explicitly. Sample data is used
+only when `VITE_USE_MOCK_DATA=true`, with a visible demo banner.
+
+Cache matching requires the same provider model by default. Compatible
+below-threshold candidates contribute similarity observations to drift monitoring
+without being served or counted as hits; requests with no compatible candidate
+have no similarity observation. Historical missing scores are not backfilled.
+
+Each stored response has one absolute expiration deadline shared by Redis,
+vector metadata, and database history. Lookup, cleanup, and index rebuilds honor
+that deadline, including custom TTLs. Legacy persisted vectors without an
+expiration deadline expire conservatively rather than receiving a new lifetime.
+The Anthropic adapter sends all system instructions as ordered text blocks in
+both streaming and non-streaming requests. Normal Claude completions map to
+`stop`; token limits map to `length`. Only confirmed normal completions are
+cached. A stream ending without its terminal message event raises an error
+instead of marking the partial answer complete.
+
+
+### Backend container build
+
+Build from the repository root: `docker build -f backend/Dockerfile .`.
+Compose uses this same context. The image includes the root `datasets/` directory
+at `/datasets` for training-data collection. For Railway, use the repository root
+as the service root and `backend/Dockerfile` as the Dockerfile path.
 
 ## Integration Guide
+
+The proxy supports text-only chat messages and the request parameters declared in
+its API schema. Unsupported fields (including tools, tool choice, response format,
+and multiple completions) return HTTP 422 rather than being silently discarded.
+Cache context preserves all message roles, boundaries, order, and assistant
+continuations. Only the current query is matched semantically. Redis keys use
+versioned canonical JSON rather than delimiter-separated fields. Entries with
+older context encodings miss safely and expire normally; the cache refills as
+new requests arrive.
+
 
 DriftCache implements **OpenAI-compatible chat completions**, providing a proxy for LLM integrations. Just change your `base_url` to start caching responses and reducing costs.
 
@@ -257,7 +299,7 @@ Request → Embed prompt → FAISS search → Similarity ≥ threshold?
 
 **Analysis Pipeline:**
 - Drift detector monitors similarity score distributions using KS-test and Wasserstein distance
-- Threshold evaluation utilities compare candidate thresholds on historical cache decisions
+- Standalone threshold benchmarks evaluate the configured similarity threshold against canonical datasets
 - Fine-tuning trainer uses contrastive learning on cached query pairs to improve domain-specific matching
 
 ## API Endpoints
@@ -281,7 +323,6 @@ GET  /api/v1/training/stats               # Training statistics
 ```bash
 GET  /api/v1/metrics/summary       # Hit rate, latency, cost savings
 GET  /api/v1/drift/latest          # Latest drift alert
-GET  /api/v1/benchmark/summary     # Benchmark results
 ```
 
 ## Fine-Tuning Pipeline

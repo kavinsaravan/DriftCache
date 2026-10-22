@@ -6,49 +6,6 @@ Pydantic models for training API requests/responses
 from typing import Optional, Dict, Any
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
-from enum import Enum
-
-
-class PairTypeEnum(str, Enum):
-    """Type of training pair"""
-    POSITIVE = "positive"
-    HARD_NEGATIVE = "hard_negative"
-    EASY_NEGATIVE = "easy_negative"
-
-
-class JobStatusEnum(str, Enum):
-    """Training job status"""
-    PENDING = "pending"
-    COLLECTING_DATA = "collecting_data"
-    TRAINING = "training"
-    EVALUATING = "evaluating"
-    COMPLETED = "completed"
-    FAILED = "failed"
-
-
-# Training Pair Schemas
-class TrainingPairCreate(BaseModel):
-    """Schema for creating a training pair"""
-    anchor_text: str
-    comparison_text: str
-    pair_type: PairTypeEnum
-    similarity_score: Optional[float] = None
-    anchor_cache_id: Optional[str] = None
-    comparison_cache_id: Optional[str] = None
-
-
-class TrainingPairResponse(BaseModel):
-    """Schema for training pair response"""
-    id: int
-    anchor_text: str
-    comparison_text: str
-    pair_type: str
-    similarity_score: Optional[float] = None
-    is_validated: int
-    used_in_training: int
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 # Data Collection Schemas
@@ -121,20 +78,6 @@ class TrainingJobResponse(BaseModel):
     completed_at: Optional[datetime]
 
     model_config = ConfigDict(from_attributes=True)
-
-
-# Model Version Schemas
-class ModelVersionCreate(BaseModel):
-    """Request to create a model version"""
-    version_id: str
-    model_name: str
-    base_model: str
-    is_finetuned: bool = False
-    training_job_id: Optional[str] = None
-    huggingface_url: Optional[str] = None
-    performance_metrics: Dict[str, Any] = Field(default_factory=dict)
-    dimension: int
-    description: Optional[str] = None
 
 
 class ModelVersionResponse(BaseModel):

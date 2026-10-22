@@ -1,5 +1,6 @@
 from datetime import datetime
 from types import SimpleNamespace
+import threading
 
 import numpy as np
 import pytest
@@ -164,6 +165,8 @@ def test_model_cutover_rebuilds_vectors_and_preserves_ids(monkeypatch, tmp_path)
     service.faiss_index = index
     service.metadata_store = store
     service.embedding_service = SimpleNamespace(model=SimpleNamespace(model_name="old-model"))
+    service._lock = threading.RLock()
+    service._dirty = False
 
     class CandidateModel:
         model_name = "new-model"

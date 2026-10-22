@@ -7,6 +7,7 @@ import pytest
 import numpy as np
 import tempfile
 import os
+import threading
 
 from app.vectorstore.faiss_index import FAISSIndex
 from app.vectorstore.storage import MetadataStore
@@ -14,6 +15,40 @@ from app.vectorstore.search import SemanticSearchService
 from app.models.search_schemas import VectorMetadata
 from app.models.embedding_schemas import Embedding, EmbeddingMetadata
 from app.embeddings.service import get_embedding_service
+
+
+def test_vector_journal_replays_uncheckpointed_entry(tmp_path):
+    metadata_path = tmp_path / "metadata.json"
+    metadata = VectorMetadata(
+        vector_id=9,
+        cache_id="cache-9",
+        prompt_id="prompt-9",
+        prompt_text="Explain caching",
+        response_text="Caching stores reusable results.",
+        model_name="test-model",
+        embedding_model="test-embedding",
+        request_params={"temperature": 0.0},
+    )
+
+    writer = object.__new__(SemanticSearchService)
+    writer.metadata_store = MetadataStore(str(metadata_path))
+    writer._lock = threading.RLock()
+    writer._dirty = False
+    writer._append_journal(
+        [(np.asarray([1.0, 0.0], dtype=np.float32), metadata)]
+    )
+
+    reader = object.__new__(SemanticSearchService)
+    reader.faiss_index = FAISSIndex(dimension=2)
+    reader.faiss_index.create_index()
+    reader.metadata_store = MetadataStore(str(metadata_path))
+    reader._lock = threading.RLock()
+    reader._dirty = False
+
+    assert reader._replay_journal() == 1
+    assert reader.faiss_index.get_ids() == {9}
+    assert reader.metadata_store.get(9).cache_id == "cache-9"
+    assert reader._dirty is True
 
 
 def test_faiss_index_creation():

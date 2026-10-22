@@ -10,6 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from app.metrics.calculator import MetricsCalculator
 from app.models.cache_entry import CacheEntry
 from app.models.cache_schemas import (
+    CacheKey,
     CacheDecision,
     CacheDecisionResult,
     CachedResponse,
@@ -21,7 +22,100 @@ from app.repositories.cache_repo import CacheRepository
 from app.services import cache_recorder as cache_recorder_module
 from app.services.cache_recorder import CacheRecorder
 from app.cache.service import CacheService
+from app.core import redis as redis_module
 from app.models.search_schemas import CacheEntry as SearchCacheEntry, VectorMetadata
+
+
+def test_cache_key_changes_with_generation_parameters():
+    base = CacheKey(
+        prompt_text="Explain caching",
+        model_name="test-model",
+        tenant_id="project:test",
+        request_params={"temperature": 0.0, "max_tokens": 100},
+    )
+    changed = base.model_copy(
+        update={"request_params": {"temperature": 1.0, "max_tokens": 100}}
+    )
+
+    assert base.to_cache_key_hash() != changed.to_cache_key_hash()
+
+
+@pytest.mark.asyncio
+async def test_disconnected_redis_singleton_retries_connection(monkeypatch):
+    class FakeRedisManager:
+        def __init__(self):
+            self.is_connected = False
+            self.connect_calls = 0
+
+        async def connect(self):
+            self.connect_calls += 1
+            self.is_connected = True
+
+    manager = FakeRedisManager()
+    monkeypatch.setattr(redis_module, "_redis_manager", manager)
+
+    resolved = await redis_module.get_redis_manager()
+
+    assert resolved is manager
+    assert manager.connect_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_cache_lookup_failure_falls_back_to_provider_path(monkeypatch):
+    cache_service = AsyncMock()
+    cache_service.check_cache.side_effect = RuntimeError("cache unavailable")
+
+    monkeypatch.setattr(
+        cache_recorder_module,
+        "get_db_manager",
+        lambda: (_ for _ in ()).throw(RuntimeError("database unavailable")),
+    )
+
+    request_id, result = await CacheRecorder(cache_service).check_and_record(
+        messages=[Message(role="user", content="Explain caching")],
+        model_name="test-model",
+        request_params={"temperature": 0.0},
+    )
+
+    assert request_id
+    assert result.decision == CacheDecision.ERROR
+    assert not result.is_hit()
+
+
+@pytest.mark.asyncio
+async def test_cache_store_failure_does_not_hide_provider_response(monkeypatch):
+    cache_service = AsyncMock()
+    cache_service.store_response.side_effect = RuntimeError("disk unavailable")
+    provider_calls = []
+
+    class FakeProviderRepository:
+        def __init__(self, session):
+            pass
+
+        def create(self, **kwargs):
+            provider_calls.append(kwargs)
+
+    class FakeDatabaseManager:
+        @contextmanager
+        def session_scope(self):
+            yield object()
+
+    monkeypatch.setattr(cache_recorder_module, "get_db_manager", FakeDatabaseManager)
+    monkeypatch.setattr(
+        cache_recorder_module, "ProviderRepository", FakeProviderRepository
+    )
+
+    cache_id = await CacheRecorder(cache_service).store_and_record(
+        request_id="request-123",
+        messages=[Message(role="user", content="Explain caching")],
+        response_text="Caching stores reusable results.",
+        model_name="test-model",
+        provider="openai",
+        provider_latency_ms=125.0,
+    )
+
+    assert cache_id is None
+    assert provider_calls[0]["latency_ms"] == 125.0
 
 
 @pytest.mark.asyncio
@@ -133,7 +227,6 @@ async def test_cache_hit_increments_persistent_entry_counter(monkeypatch):
     monkeypatch.setattr(cache_recorder_module, "get_db_manager", FakeDatabaseManager)
     monkeypatch.setattr(cache_recorder_module, "RequestRepository", FakeRequestRepository)
     monkeypatch.setattr(cache_recorder_module, "CacheRepository", FakeCacheRepository)
-    monkeypatch.setattr(cache_recorder_module, "get_active_threshold", lambda *args, **kwargs: 0.9)
     monkeypatch.setattr("app.repositories.index_repo.IndexRepository", FakeIndexRepository)
 
     recorder = CacheRecorder(cache_service=cache_service)

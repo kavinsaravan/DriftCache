@@ -7,20 +7,11 @@ from sqlalchemy import pool
 from alembic import context
 
 # Import your Base and models
-from app.database.base import Base
+from app.database.base import Base, import_models
 from app.core.config import settings
 
-# Import all models to ensure they're registered
-from app.models import request  # noqa
-from app.models import cache_entry  # noqa
-from app.models import cache_event  # noqa
-from app.models import embedding_record  # noqa
-from app.models import provider_call # noqa
-from app.models import threshold_version  # noqa
-from app.models import project  # noqa
-from app.models import training_pair  # noqa
-from app.models import training_job  # noqa
-from app.models import model_version  # noqa
+# Use the same model registry as application startup and tests.
+import_models()
 
 # this is the Alembic Config object
 config = context.config
@@ -33,7 +24,7 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 # Override sqlalchemy.url from app config
-config.set_main_option('sqlalchemy.url', settings.DATABASE_URL)
+config.set_main_option('sqlalchemy.url', settings.DB_URL.replace('%', '%%'))
 
 
 def run_migrations_offline() -> None:

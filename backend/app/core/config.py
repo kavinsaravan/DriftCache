@@ -117,25 +117,37 @@ class Settings(BaseSettings):
         ge=60,
         description="Seconds between expired-vector cleanup runs",
     )
+    VECTOR_PERSIST_INTERVAL_SECONDS: int = Field(
+        default=30,
+        ge=5,
+        description="Seconds between atomic FAISS checkpoints",
+    )
+
+    def get_index_storage_dir(self):
+        """Resolve local storage, preferring an attached Railway volume."""
+        import os
+        from pathlib import Path
+
+        railway_mount = os.getenv("RAILWAY_VOLUME_MOUNT_PATH")
+        if railway_mount:
+            storage_dir = Path(railway_mount)
+        else:
+            configured = Path(self.INDEX_STORAGE_DIR)
+            if configured.is_absolute():
+                storage_dir = configured
+            else:
+                project_root = Path(__file__).parent.parent.parent.parent
+                storage_dir = project_root / configured
+        storage_dir.mkdir(parents=True, exist_ok=True)
+        return storage_dir
 
     def get_index_path(self) -> str:
         """Get absolute path to FAISS index file"""
-        from pathlib import Path
-        # Find project root (backend/app/core/config.py -> DriftCache/)
-        # parent: core -> app -> backend -> DriftCache (4 parent calls)
-        project_root = Path(__file__).parent.parent.parent.parent
-        storage_dir = project_root / self.INDEX_STORAGE_DIR
-        storage_dir.mkdir(parents=True, exist_ok=True)
-        return str(storage_dir / self.FAISS_INDEX_FILENAME)
+        return str(self.get_index_storage_dir() / self.FAISS_INDEX_FILENAME)
 
     def get_metadata_path(self) -> str:
         """Get absolute path to metadata file"""
-        from pathlib import Path
-        # Find project root (backend/app/core/config.py -> DriftCache/)
-        # parent: core -> app -> backend -> DriftCache (4 parent calls)
-        project_root = Path(__file__).parent.parent.parent.parent
-        storage_dir = project_root / self.INDEX_STORAGE_DIR
-        storage_dir.mkdir(parents=True, exist_ok=True)
-        return str(storage_dir / self.METADATA_FILENAME)
+        return str(self.get_index_storage_dir() / self.METADATA_FILENAME)
+
 
 settings = Settings()

@@ -7,7 +7,7 @@ Endpoints use different auth based on their function:
 - Metrics endpoints accept either API_KEY or METRICS_API_KEY (read-only)
 """
 from fastapi import APIRouter, Depends
-from app.api.endpoints import chat, models, evaluation, metrics, drift, benchmark, vectorstore, training, projects
+from app.api.endpoints import chat, models, metrics, drift, vectorstore, training, projects
 from app.core.auth import verify_admin_key, verify_api_key
 
 # Main router without global dependencies to avoid stacking
@@ -27,14 +27,6 @@ api_router.include_router(
 # Project and key administration has its own bootstrap-key dependency.
 api_router.include_router(projects.router)
 
-# Operational endpoints remain restricted to the bootstrap/admin key. Their
-# tenant query parameters are not yet derived from a project auth context.
-api_router.include_router(
-    evaluation.router,
-    tags=["evaluation"],
-    dependencies=[Depends(verify_admin_key)]
-)
-
 # Metrics endpoints (accept either main key or read-only metrics key)
 api_router.include_router(
     metrics.router,
@@ -46,14 +38,6 @@ api_router.include_router(
     drift.router,
     prefix="/drift",
     tags=["drift"],
-    dependencies=[Depends(verify_admin_key)]
-)
-
-# Benchmark endpoints (require main API key)
-api_router.include_router(
-    benchmark.router,
-    prefix="/benchmark",
-    tags=["benchmark"],
     dependencies=[Depends(verify_admin_key)]
 )
 

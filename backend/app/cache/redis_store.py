@@ -60,7 +60,9 @@ class RedisStore:
             response: CachedResponse to store
             ttl_seconds: Time-to-live in seconds (defaults to settings)
         """
-        ttl = ttl_seconds or settings.CACHE_TTL_SECONDS
+        ttl = settings.CACHE_TTL_SECONDS if ttl_seconds is None else ttl_seconds
+        if ttl <= 0:
+            raise ValueError("Cache TTL must be positive")
 
         # Store response data
         response_key = self._response_key(cache_id)
@@ -394,9 +396,12 @@ async def get_redis_store() -> RedisStore:
     """
     global _redis_store
 
+    from app.core.redis import get_redis
+    redis_client = await get_redis()
+
     if _redis_store is None:
-        from app.core.redis import get_redis
-        redis_client = await get_redis()
         _redis_store = RedisStore(redis_client)
+    elif _redis_store.redis is not redis_client:
+        _redis_store.redis = redis_client
 
     return _redis_store

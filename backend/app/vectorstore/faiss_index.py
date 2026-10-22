@@ -198,6 +198,17 @@ class FAISSIndex:
         self.index.remove_ids(ids)
         logger.info(f"Removed {len(ids)} vectors from index")
 
+    def get_ids(self) -> set[int]:
+        """Return explicit vector IDs currently stored in the index."""
+        if self.index is None or self.index.ntotal == 0:
+            return set()
+        if hasattr(self.index, "id_map"):
+            return {
+                int(value)
+                for value in faiss.vector_to_array(self.index.id_map)
+            }
+        return set(range(self.index.ntotal))
+
     def save(self, path: str) -> None:
         """
         Save index to disk

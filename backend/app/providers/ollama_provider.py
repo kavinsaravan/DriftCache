@@ -81,6 +81,9 @@ class OllamaProvider(BaseProvider):
         max_tokens: Optional[int] = None,
         top_p: float = 1.0,
         stream: bool = False,
+        stop: Optional[str | List[str]] = None,
+        presence_penalty: float = 0.0,
+        frequency_penalty: float = 0.0,
         **kwargs
     ) -> ChatCompletionResponse:
         """Generate a non-streaming chat completion using Ollama"""
@@ -95,8 +98,13 @@ class OllamaProvider(BaseProvider):
             "options": {
                 "temperature": temperature,
                 "top_p": top_p,
+                "presence_penalty": presence_penalty,
+                "frequency_penalty": frequency_penalty,
             }
         }
+
+        if stop:
+            payload["options"]["stop"] = [stop] if isinstance(stop, str) else stop
 
         if max_tokens:
             payload["options"]["num_predict"] = max_tokens
@@ -159,6 +167,9 @@ class OllamaProvider(BaseProvider):
         temperature: float = 1.0,
         max_tokens: Optional[int] = None,
         top_p: float = 1.0,
+        stop: Optional[str | List[str]] = None,
+        presence_penalty: float = 0.0,
+        frequency_penalty: float = 0.0,
         **kwargs
     ) -> AsyncIterator[str]:
         """Generate a streaming chat completion using Ollama"""
@@ -173,8 +184,13 @@ class OllamaProvider(BaseProvider):
             "options": {
                 "temperature": temperature,
                 "top_p": top_p,
+                "presence_penalty": presence_penalty,
+                "frequency_penalty": frequency_penalty,
             }
         }
+
+        if stop:
+            payload["options"]["stop"] = [stop] if isinstance(stop, str) else stop
 
         if max_tokens:
             payload["options"]["num_predict"] = max_tokens

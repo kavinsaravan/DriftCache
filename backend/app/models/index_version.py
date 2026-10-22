@@ -1,7 +1,7 @@
 """
 Index Version Model
 
-Tracks FAISS index versions for point-in-time evaluation
+Tracks deployed FAISS indexes and their embedding models.
 """
 from sqlalchemy import Column, String, Integer, DateTime, Text, Boolean
 from sqlalchemy.sql import func
@@ -13,18 +13,7 @@ class IndexVersion(Base):
     """
     Index versions table
 
-    Records changes to FAISS index and embedding model
-
-    Why this matters:
-    When evaluating a cache decision from the past, you need to know:
-    "Which embedding model was used to generate that vector?"
-    "Which FAISS index version was active?"
-
-    This enables:
-    - Point-in-time evaluation
-    - Embedding model A/B testing
-    - Historical consistency verification
-    - Prevention of data leakage in evaluation
+    Records the currently deployed index and prior deployment metadata.
     """
     __tablename__ = "index_versions"
 

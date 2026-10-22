@@ -68,6 +68,8 @@ async def create_chat_completion(
                 ).model_dump()
             )
 
+        generation_parameters = request.generation_parameters()
+
         # Handle streaming vs non-streaming
         if request.stream:
             # STREAMING MODE
@@ -77,7 +79,8 @@ async def create_chat_completion(
                 model_name=request.model,
                 tenant_id=auth.tenant_id,
                 user_id=request.user,
-                stream=True
+                stream=True,
+                request_params=generation_parameters,
             )
 
             if cache_result.is_hit():
@@ -112,6 +115,8 @@ async def create_chat_completion(
                 model=request.model
             )
 
+            provider_started_at = time.perf_counter()
+
             # Define callback for when stream completes
             async def on_stream_complete(response):
                 """Store the collected response in cache"""
@@ -126,18 +131,33 @@ async def create_chat_completion(
                         f"finish_reason={response.finish_reason}"
                     )
 
+                    input_text = " ".join([m.content for m in request.messages])
+                    input_tokens = len(input_text) // 4
+                    provider = provider_router.get_provider_for_model(request.model)
+                    provider_latency_ms = (
+                        time.perf_counter() - provider_started_at
+                    ) * 1000
+
                     # Only cache if response completed successfully
                     if response.finish_reason != "stop":
                         logger.warning(
                             f"Skipping cache storage: finish_reason={response.finish_reason} "
                             f"(truncated or filtered response)"
                         )
+                        await cache_recorder.record_provider_call(
+                            request_id=request_id,
+                            model_name=request.model,
+                            tenant_id=auth.tenant_id,
+                            user_id=request.user,
+                            provider=provider,
+                            input_tokens=input_tokens,
+                            output_tokens=output_tokens,
+                            estimated_cost=calculate_cost(
+                                request.model, input_tokens, output_tokens
+                            ),
+                            provider_latency_ms=provider_latency_ms,
+                        )
                         return
-
-                    # Estimate input tokens (we don't have exact count in streaming)
-                    # Rough estimate based on request messages
-                    input_text = " ".join([m.content for m in request.messages])
-                    input_tokens = len(input_text) // 4  # ~4 chars per token
 
                     # Store in cache + database
                     await cache_recorder.store_and_record(
@@ -147,14 +167,16 @@ async def create_chat_completion(
                         model_name=request.model,
                         tenant_id=auth.tenant_id,
                         user_id=request.user,
-                        provider=provider_router.get_provider_for_model(request.model),
+                        provider=provider,
                         input_tokens=input_tokens,  # Estimated
                         output_tokens=output_tokens,  # Estimated
                         estimated_cost=calculate_cost(
                             request.model,
                             input_tokens,
                             output_tokens
-                        )
+                        ),
+                        provider_latency_ms=provider_latency_ms,
+                        request_params=generation_parameters,
                     )
                     logger.info(
                         f"Cached streaming response: {len(response.content)} chars, "
@@ -171,6 +193,9 @@ async def create_chat_completion(
                 temperature=request.temperature,
                 max_tokens=request.max_tokens or 1024,
                 top_p=request.top_p,
+                stop=request.stop,
+                presence_penalty=request.presence_penalty,
+                frequency_penalty=request.frequency_penalty,
             )
 
             # Wrap with collector
@@ -198,7 +223,8 @@ async def create_chat_completion(
                 model_name=request.model,
                 tenant_id=auth.tenant_id,
                 user_id=request.user,
-                stream=False
+                stream=False,
+                request_params=generation_parameters,
             )
 
             if cache_result.is_hit():
@@ -238,13 +264,18 @@ async def create_chat_completion(
 
             # Cache miss - call provider
             logger.info(f"✗ CACHE MISS: {cache_result.reason}")
+            provider_started_at = time.perf_counter()
             response = await provider_router.chat_completion(
                 model=request.model,
                 messages=request.messages,
                 temperature=request.temperature,
                 max_tokens=request.max_tokens or 1024,
                 top_p=request.top_p,
+                stop=request.stop,
+                presence_penalty=request.presence_penalty,
+                frequency_penalty=request.frequency_penalty,
             )
+            provider_latency_ms = (time.perf_counter() - provider_started_at) * 1000
 
             # Only cache if response completed successfully
             finish_reason = response.choices[0].finish_reason if response.choices else None
@@ -252,6 +283,21 @@ async def create_chat_completion(
                 logger.warning(
                     f"Skipping cache storage: finish_reason={finish_reason} "
                     f"(truncated or filtered response)"
+                )
+                await cache_recorder.record_provider_call(
+                    request_id=request_id,
+                    model_name=request.model,
+                    tenant_id=auth.tenant_id,
+                    user_id=request.user,
+                    provider=provider_router.get_provider_for_model(request.model),
+                    input_tokens=response.usage.prompt_tokens if response.usage else None,
+                    output_tokens=response.usage.completion_tokens if response.usage else None,
+                    estimated_cost=calculate_cost(
+                        request.model,
+                        response.usage.prompt_tokens if response.usage else None,
+                        response.usage.completion_tokens if response.usage else None,
+                    ),
+                    provider_latency_ms=provider_latency_ms,
                 )
             else:
                 # Store response in cache + database for future requests
@@ -270,7 +316,9 @@ async def create_chat_completion(
                         request.model,
                         response.usage.prompt_tokens if response.usage else None,
                         response.usage.completion_tokens if response.usage else None
-                    )
+                    ),
+                    provider_latency_ms=provider_latency_ms,
+                    request_params=generation_parameters,
                 )
                 logger.info(f"Stored in cache+DB: {response.usage.total_tokens if response.usage else 0} tokens")
 
@@ -282,6 +330,17 @@ async def create_chat_completion(
 
     except HTTPException:
         raise
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(
+                error=ErrorDetail(
+                    message=str(e),
+                    type="invalid_request_error",
+                    code="invalid_request",
+                )
+            ).model_dump(),
+        ) from e
     except Exception as e:
         # Handle unexpected errors - don't expose internal details
         logger.error(f"Internal error in chat completion: {e}", exc_info=True)

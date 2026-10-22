@@ -109,6 +109,9 @@ class ProviderRouter:
         max_tokens: Optional[int] = None,
         top_p: float = 1.0,
         stream: bool = False,
+        stop: Optional[str | List[str]] = None,
+        presence_penalty: float = 0.0,
+        frequency_penalty: float = 0.0,
         **kwargs
     ) -> ChatCompletionResponse:
         """
@@ -148,6 +151,9 @@ class ProviderRouter:
             max_tokens=max_tokens,
             top_p=top_p,
             stream=stream,
+            stop=stop,
+            presence_penalty=presence_penalty,
+            frequency_penalty=frequency_penalty,
             **kwargs
         )
 
@@ -158,6 +164,9 @@ class ProviderRouter:
         temperature: float = 1.0,
         max_tokens: Optional[int] = None,
         top_p: float = 1.0,
+        stop: Optional[str | List[str]] = None,
+        presence_penalty: float = 0.0,
+        frequency_penalty: float = 0.0,
         **kwargs
     ) -> AsyncIterator[str]:
         """
@@ -195,6 +204,9 @@ class ProviderRouter:
             temperature=temperature,
             max_tokens=max_tokens,
             top_p=top_p,
+            stop=stop,
+            presence_penalty=presence_penalty,
+            frequency_penalty=frequency_penalty,
             **kwargs
         ):
             yield chunk

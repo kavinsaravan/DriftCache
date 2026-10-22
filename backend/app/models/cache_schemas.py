@@ -4,7 +4,7 @@ Cache Schemas
 Data models for cache entries, decisions, and configuration
 """
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel, Field
 from enum import Enum
 
@@ -34,7 +34,7 @@ class CacheConfig(BaseModel):
         description="Time-to-live in seconds"
     )
     require_same_model: bool = Field(
-        default=False,
+        default=True,
         description="Whether cached response must be from same model"
     )
     include_system_prompt: bool = Field(
@@ -81,7 +81,10 @@ class CachedResponse(BaseModel):
         """Check if cache entry has expired"""
         if self.expires_at is None:
             return False
-        return datetime.utcnow() > self.expires_at
+        deadline = self.expires_at
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=timezone.utc)
+        return datetime.now(timezone.utc) >= deadline
 
     def increment_hit(self) -> None:
         """Increment cache hit counter"""
@@ -94,6 +97,7 @@ class CacheStoreResult(BaseModel):
 
     cache_id: str
     vector_id: int
+    expires_at: Optional[datetime] = None
 
 
 class CacheDecisionResult(BaseModel):
@@ -136,16 +140,6 @@ class CacheDecisionResult(BaseModel):
         ]
 
 
-class CacheRequest(BaseModel):
-    """Request to check cache"""
-    prompt_text: str
-    system_prompt: Optional[str] = None
-    model_name: str
-    tenant_id: str = "default"
-    user_id: Optional[str] = None
-    config: Optional[CacheConfig] = None
-
-
 class CacheStats(BaseModel):
     """Cache statistics"""
     total_requests: int = 0
@@ -174,14 +168,6 @@ class CacheStats(BaseModel):
     since: datetime = Field(default_factory=datetime.utcnow)
 
 
-class CacheInvalidation(BaseModel):
-    """Cache invalidation request"""
-    cache_ids: Optional[List[str]] = None
-    model_name: Optional[str] = None
-    tenant_id: Optional[str] = None
-    older_than: Optional[datetime] = None
-
-
 class CacheKey(BaseModel):
     """
     Cache key components
@@ -193,6 +179,7 @@ class CacheKey(BaseModel):
     conversation_history: Optional[str] = None  # Assistant context for multi-turn
     model_name: Optional[str] = None  # Optional for flexible matching
     tenant_id: str = "default"
+    request_params: Dict[str, Any] = Field(default_factory=dict)
 
     def to_embedding_text(self, include_system: bool = True) -> str:
         """
@@ -229,16 +216,14 @@ class CacheKey(BaseModel):
             SHA256 hash of all key components
         """
         import hashlib
+        import json
 
-        # Build a canonical string representation
-        components = [
-            f"tenant:{self.tenant_id}",
-            f"model:{self.model_name or ''}",
-            f"system:{self.system_prompt or ''}",
-            f"history:{self.conversation_history or ''}",
-            f"prompt:{self.prompt_text}"
-        ]
-        canonical = "|".join(components)
+        # Structured fields prevent prompt/history text from becoming separators.
+        # Version this encoding so later changes cannot reuse ambiguous old keys.
+        canonical = json.dumps(
+            {"version": 2, **self.to_dict()},
+            sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False,
+        )
 
         # Hash to fixed-length identifier
         return hashlib.sha256(canonical.encode('utf-8')).hexdigest()
@@ -250,5 +235,6 @@ class CacheKey(BaseModel):
             "system_prompt": self.system_prompt,
             "conversation_history": self.conversation_history,
             "model_name": self.model_name,
-            "tenant_id": self.tenant_id
+            "tenant_id": self.tenant_id,
+            "request_params": self.request_params,
         }

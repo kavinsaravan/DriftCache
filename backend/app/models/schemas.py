@@ -2,18 +2,22 @@
 OpenAI-compatible request/response schemas
 """
 from typing import Optional, List, Dict, Any, Literal, Union
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # Chat Completion Request Models
 class Message(BaseModel):
     """Chat message"""
+    model_config = ConfigDict(extra="forbid")
+
     role: Literal["system", "user", "assistant"]
     content: str
 
 
 class ChatCompletionRequest(BaseModel):
-    """OpenAI-compatible chat completion request"""
+    """Supported text-only chat completion request; reject unsupported features."""
+    model_config = ConfigDict(extra="forbid")
+
     model: str
     messages: List[Message]
     temperature: Optional[float] = Field(default=1.0, ge=0.0, le=2.0)
@@ -24,6 +28,17 @@ class ChatCompletionRequest(BaseModel):
     presence_penalty: Optional[float] = Field(default=0.0, ge=-2.0, le=2.0)
     frequency_penalty: Optional[float] = Field(default=0.0, ge=-2.0, le=2.0)
     user: Optional[str] = None
+
+    def generation_parameters(self) -> Dict[str, Any]:
+        """Return response-affecting parameters used for cache compatibility."""
+        return {
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens or 1024,
+            "top_p": self.top_p,
+            "stop": self.stop,
+            "presence_penalty": self.presence_penalty,
+            "frequency_penalty": self.frequency_penalty,
+        }
 
 
 # Chat Completion Response Models

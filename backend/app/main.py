@@ -11,7 +11,8 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager, suppress
 
-from fastapi import FastAPI
+from fastapi import FastAPI, status
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
@@ -42,6 +43,18 @@ async def periodic_vector_cleanup(interval_seconds: int) -> None:
             await asyncio.to_thread(cleanup_expired_vectors)
         except Exception:
             logger.exception("Periodic expired-vector cleanup failed")
+
+
+async def periodic_vector_checkpoint(interval_seconds: int) -> None:
+    """Persist dirty FAISS state without rewriting it for every cache miss."""
+    from app.vectorstore.search import get_search_service
+
+    while True:
+        await asyncio.sleep(interval_seconds)
+        try:
+            await asyncio.to_thread(get_search_service().save_if_dirty)
+        except Exception:
+            logger.exception("Periodic FAISS checkpoint failed")
 
 
 def get_llm_configuration_status() -> dict:
@@ -88,31 +101,18 @@ async def lifespan(app: FastAPI):
         db_manager = get_db_manager()
         logger.info("PostgreSQL connection established")
 
-        # Run Alembic migrations automatically
-        try:
-            from alembic.config import Config
-            from alembic import command
-            import os
+        from alembic.config import Config
+        from alembic import command
+        import os
 
-            # Get alembic config path
-            alembic_cfg = Config(os.path.join(os.path.dirname(__file__), "..", "alembic.ini"))
-            alembic_cfg.set_main_option("script_location", os.path.join(os.path.dirname(__file__), "..", "alembic"))
-
-            # Run migrations
-            command.upgrade(alembic_cfg, "head")
-            logger.info("Database migrations completed successfully")
-        except Exception as e:
-            logger.warning(f"Failed to run migrations, trying create_tables: {e}")
-            # Fallback to create_tables for dev
-            try:
-                db_manager.create_tables()
-                logger.info("Database tables initialized")
-            except Exception as e2:
-                logger.warning(f"Failed to create tables (may already exist): {e2}")
+        alembic_cfg = Config(os.path.join(os.path.dirname(__file__), "..", "alembic.ini"))
+        alembic_cfg.set_main_option("script_location", os.path.join(os.path.dirname(__file__), "..", "alembic"))
+        command.upgrade(alembic_cfg, "head")
+        logger.info("Database migrations completed successfully")
 
     except Exception as e:
-        logger.error(f"Failed to connect to PostgreSQL: {e}")
-        logger.warning("Running without PostgreSQL - historical recording disabled")
+        logger.exception("Database initialization or migration failed")
+        raise RuntimeError("Database initialization failed") from e
 
     # Initialize Redis connection
     try:
@@ -137,13 +137,20 @@ async def lifespan(app: FastAPI):
         periodic_vector_cleanup(settings.VECTOR_CLEANUP_INTERVAL_SECONDS),
         name="expired-vector-cleanup",
     )
+    checkpoint_task = asyncio.create_task(
+        periodic_vector_checkpoint(settings.VECTOR_PERSIST_INTERVAL_SECONDS),
+        name="faiss-checkpoint",
+    )
 
     try:
         yield
     finally:
         cleanup_task.cancel()
+        checkpoint_task.cancel()
         with suppress(asyncio.CancelledError):
             await cleanup_task
+        with suppress(asyncio.CancelledError):
+            await checkpoint_task
 
         # Shutdown
         logger.info("Shutting down DriftCache API...")
@@ -241,9 +248,13 @@ async def health_check():
     )
     overall_status = "healthy" if all_healthy else "degraded"
 
-    return {
+    payload = {
         "status": overall_status,
         "database": db_status,
         "redis": redis_status,
         "llm": llm_status,
     }
+    return JSONResponse(
+        status_code=status.HTTP_200_OK if all_healthy else status.HTTP_503_SERVICE_UNAVAILABLE,
+        content=payload,
+    )

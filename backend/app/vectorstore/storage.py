@@ -280,11 +280,8 @@ class MetadataStore:
         expired_count = 0
 
         for metadata in self.metadata.values():
-            # Check if entry has expired based on timestamp + TTL
-            if metadata.timestamp:
-                age_seconds = (now - metadata.timestamp).total_seconds()
-                if age_seconds > ttl_seconds:
-                    expired_count += 1
+            if metadata.is_expired(now, ttl_seconds):
+                expired_count += 1
 
         total_count = len(self.metadata)
         ratio = expired_count / total_count if total_count > 0 else 0.0

@@ -1,3 +1,6 @@
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { getMetricsKey, setMetricsKey, USE_MOCK_DATA } from '../api/metricsApi';
 /**
  * Layout Component
  *
@@ -16,6 +19,9 @@ const navigation = [
 
 export default function Layout() {
   const location = useLocation();
+  const queryClient = useQueryClient();
+  const [key, setKey] = useState(getMetricsKey);
+  const [saved, setSaved] = useState(false);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -62,14 +68,22 @@ export default function Layout() {
       {/* Main Content */}
       <div className="pl-64">
         {/* Top Bar */}
-        <div className="h-16 bg-white border-b border-gray-200 flex items-center justify-end px-8">
-          <div className="flex items-center space-x-4">
-            <select className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="24h">Last 24 hours</option>
-              <option value="7d">Last 7 days</option>
-              <option value="30d">Last 30 days</option>
-            </select>
-          </div>
+        <div className="bg-white border-b border-gray-200 px-8 py-4">
+          {USE_MOCK_DATA ? <p className="text-amber-800">Demo mode — showing sample data.</p> : (
+            <form className="flex items-center gap-3" onSubmit={(event) => {
+              event.preventDefault();
+              setMetricsKey(key);
+              setSaved(true);
+              void queryClient.resetQueries();
+            }}>
+              <label htmlFor="metrics-key" className="text-sm">Metrics or project API key</label>
+              <input id="metrics-key" type="password" autoComplete="off" value={key}
+                onChange={(event) => { setKey(event.target.value); setSaved(false); }}
+                className="border rounded px-3 py-2" />
+              <button type="submit" className="bg-blue-600 text-white rounded px-3 py-2">Apply key</button>
+              <span className="text-sm text-gray-500" role="status">{saved ? 'Key applied.' : 'Stored for this tab only.'}</span>
+            </form>
+          )}
         </div>
 
         {/* Page Content */}

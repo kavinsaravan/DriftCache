@@ -4,6 +4,7 @@ Redis Connection Manager
 Manages Redis client connection and provides shared instance.
 """
 import logging
+import asyncio
 from typing import Optional
 import redis.asyncio as redis
 from redis.asyncio import Redis
@@ -57,11 +58,17 @@ class RedisManager:
         except ConnectionError as e:
             logger.error(f"Failed to connect to Redis: {e}")
             self._connected = False
+            if self.client:
+                await self.client.aclose()
+                self.client = None
             raise
 
         except Exception as e:
             logger.error(f"Unexpected error connecting to Redis: {e}")
             self._connected = False
+            if self.client:
+                await self.client.aclose()
+                self.client = None
             raise
 
     async def disconnect(self) -> None:
@@ -85,6 +92,10 @@ class RedisManager:
             await self.client.ping()
             return True
         except RedisError:
+            self._connected = False
+            if self.client:
+                await self.client.aclose()
+                self.client = None
             return False
 
     def get_client(self) -> Redis:
@@ -112,6 +123,7 @@ class RedisManager:
 
 # Global Redis manager instance
 _redis_manager: Optional[RedisManager] = None
+_redis_manager_lock = asyncio.Lock()
 
 
 async def get_redis_manager() -> RedisManager:
@@ -123,9 +135,12 @@ async def get_redis_manager() -> RedisManager:
     """
     global _redis_manager
 
-    if _redis_manager is None:
-        _redis_manager = RedisManager()
-        await _redis_manager.connect()
+    async with _redis_manager_lock:
+        if _redis_manager is None:
+            _redis_manager = RedisManager()
+
+        if not _redis_manager.is_connected:
+            await _redis_manager.connect()
 
     return _redis_manager
 

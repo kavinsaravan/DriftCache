@@ -109,6 +109,23 @@ async def get_top_cached_prompts(
         )
 
 
+@router.get("/requests")
+def get_request_history(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    period: str = Query("24h"),
+    tenant_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(verify_metrics_key),
+):
+    """Return individual cache decisions, including misses, newest first."""
+    with get_metrics_service(session=db) as service:
+        return service.get_request_history(
+            limit=limit, offset=offset, period=period,
+            tenant_id=_tenant_scope(auth, tenant_id),
+        )
+
+
 @router.get("/time-series/{metric}")
 async def get_time_series(
     metric: str,

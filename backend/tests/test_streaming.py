@@ -7,15 +7,13 @@ Tests for:
 - Cached stream generation
 - Error handling
 """
-import asyncio
+import json
 import pytest
 from app.services.streaming import (
     SSEFormatter,
     StreamCollector,
     StreamedResponse,
     create_cached_stream,
-    parse_sse_chunk,
-    estimate_tokens,
 )
 from app.models.schemas import (
     ChatCompletionStreamResponse,
@@ -179,44 +177,9 @@ async def test_cached_stream_generation():
 
     content = ""
     for chunk in chunks[1:-2]:
-        parsed = parse_sse_chunk(chunk)
-        if not parsed:
-            continue
-        content += parsed["choices"][0]["delta"].get("content", "")
+        payload = json.loads(chunk.removeprefix("data: ").strip())
+        content += payload["choices"][0]["delta"].get("content", "")
     assert content == cached_content
-
-
-def test_parse_sse_chunk():
-    """Test parsing SSE chunks"""
-    # Valid chunk
-    chunk1 = 'data: {"id": "test", "content": "hello"}\n\n'
-    parsed1 = parse_sse_chunk(chunk1)
-    assert parsed1 is not None
-    assert parsed1["id"] == "test"
-    assert parsed1["content"] == "hello"
-
-    # [DONE] chunk
-    chunk2 = "data: [DONE]\n\n"
-    parsed2 = parse_sse_chunk(chunk2)
-    assert parsed2 is not None
-    assert parsed2.get("done") is True
-
-    # Invalid chunk
-    chunk3 = "invalid data"
-    parsed3 = parse_sse_chunk(chunk3)
-    assert parsed3 is None
-
-
-def test_token_estimation():
-    """Test token estimation"""
-    text1 = "Hello world"
-    tokens1 = estimate_tokens(text1)
-    assert tokens1 > 0
-    assert tokens1 < len(text1)  # Tokens should be less than characters
-
-    text2 = "A" * 100
-    tokens2 = estimate_tokens(text2)
-    assert tokens2 == 25  # 100 chars / 4 = 25 tokens
 
 
 if __name__ == "__main__":

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import tempfile
-import threading
 import time
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -19,8 +18,6 @@ from app.vectorstore.search import SemanticSearchService, get_search_service
 class IndexMaintenanceService:
     """Inspect and rebuild the index used by ``SemanticSearchService``."""
 
-    _lock = threading.RLock()
-
     def __init__(self, search_service: Optional[SemanticSearchService] = None):
         self.search_service = search_service or get_search_service()
 
@@ -29,13 +26,13 @@ class IndexMaintenanceService:
         tenant_id: Optional[str] = None,
         ttl_seconds: Optional[int] = None,
     ) -> Dict[str, Any]:
-        ttl = ttl_seconds or settings.CACHE_TTL_SECONDS
+        ttl = settings.CACHE_TTL_SECONDS if ttl_seconds is None else ttl_seconds
         now = datetime.utcnow()
         all_metadata = self.search_service.metadata_store.get_all()
         metadata = [
             m for m in all_metadata if not tenant_id or m.tenant_id == tenant_id
         ]
-        stale = [m for m in metadata if (now - m.timestamp).total_seconds() > ttl]
+        stale = [m for m in metadata if m.is_expired(now, ttl)]
         vector_count = len(self.search_service.faiss_index)
         metadata_count = len(all_metadata)
 
@@ -98,29 +95,31 @@ class IndexMaintenanceService:
         initiated maintenance from a tenant-scoped workflow.
         """
         started = time.perf_counter()
-        ttl = ttl_seconds or settings.CACHE_TTL_SECONDS
-        now = datetime.utcnow()
-        metadata = self.search_service.metadata_store.get_all()
-        active = [m for m in metadata if (now - m.timestamp).total_seconds() <= ttl]
-        active.sort(key=lambda item: item.vector_id)
-        stale_count = len(metadata) - len(active)
-        old_count = len(self.search_service.faiss_index)
+        # Snapshot and replacement share the same lock as online writes. A
+        # writer that finishes before acquisition must be included in the rebuild.
+        with self.search_service.write_lock:
+            ttl = settings.CACHE_TTL_SECONDS if ttl_seconds is None else ttl_seconds
+            now = datetime.utcnow()
+            metadata = self.search_service.metadata_store.get_all()
+            active = [m for m in metadata if not m.is_expired(now, ttl)]
+            active.sort(key=lambda item: item.vector_id)
+            stale_count = len(metadata) - len(active)
+            old_count = len(self.search_service.faiss_index)
 
-        result = {
-            "status": "preview" if dry_run else "completed",
-            "dry_run": dry_run,
-            "old_vector_count": old_count,
-            "new_vector_count": len(active),
-            "vectors_reembedded": len(active),
-            "vectors_removed": stale_count,
-            "tenant_id": tenant_id,
-            "validation_passed": old_count == len(metadata),
-        }
-        if dry_run:
-            result["duration_ms"] = (time.perf_counter() - started) * 1000
-            return result
+            result = {
+                "status": "preview" if dry_run else "completed",
+                "dry_run": dry_run,
+                "old_vector_count": old_count,
+                "new_vector_count": len(active),
+                "vectors_reembedded": len(active),
+                "vectors_removed": stale_count,
+                "tenant_id": tenant_id,
+                "validation_passed": old_count == len(metadata),
+            }
+            if dry_run:
+                result["duration_ms"] = (time.perf_counter() - started) * 1000
+                return result
 
-        with self._lock:
             candidate = FAISSIndex(
                 dimension=self.search_service.faiss_index.dimension,
                 index_type="Flat",
@@ -179,9 +178,10 @@ class IndexMaintenanceService:
             live_index.index = candidate.index
             live_index.index_type = candidate.index_type
             live_index._next_id = candidate._next_id
+            self.search_service.mark_checkpointed()
 
-        result["validation_passed"] = len(self.search_service.faiss_index) == len(
-            active
-        )
-        result["duration_ms"] = (time.perf_counter() - started) * 1000
-        return result
+            result["validation_passed"] = len(self.search_service.faiss_index) == len(
+                active
+            )
+            result["duration_ms"] = (time.perf_counter() - started) * 1000
+            return result

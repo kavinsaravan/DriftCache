@@ -30,6 +30,9 @@ class BaseProvider(ABC):
         max_tokens: Optional[int] = None,
         top_p: float = 1.0,
         stream: bool = False,
+        stop: Optional[str | List[str]] = None,
+        presence_penalty: float = 0.0,
+        frequency_penalty: float = 0.0,
         **kwargs
     ) -> ChatCompletionResponse:
         """
@@ -60,6 +63,9 @@ class BaseProvider(ABC):
         temperature: float = 1.0,
         max_tokens: Optional[int] = None,
         top_p: float = 1.0,
+        stop: Optional[str | List[str]] = None,
+        presence_penalty: float = 0.0,
+        frequency_penalty: float = 0.0,
         **kwargs
     ) -> AsyncIterator[str]:
         """

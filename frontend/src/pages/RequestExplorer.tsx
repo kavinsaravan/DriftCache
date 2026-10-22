@@ -1,289 +1,75 @@
-/**
- * Request Explorer Page
- *
- * Browse and search through recent cache requests and events
- */
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Search, Filter, Download, RefreshCw } from 'lucide-react';
-import { getTopCachedPrompts, TopCachedPrompt } from '../api/metricsApi';
+import { getRequestHistory, getMetricsError } from '../api/metricsApi';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { REFETCH_INTERVALS } from '../utils/constants';
 
-type CacheStatusFilter = 'all' | 'hit' | 'miss';
-
+const PAGE_SIZE = 100;
 export default function RequestExplorer() {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<CacheStatusFilter>('all');
-
-  // Fetch cached prompts for request history
-  const { data: requests, isLoading, refetch } = useQuery<TopCachedPrompt[]>({
-    queryKey: ['request-explorer', 100],
-    queryFn: () => getTopCachedPrompts(100, '24h'),
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('all');
+  const [offset, setOffset] = useState(0);
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['request-explorer', offset],
+    queryFn: () => getRequestHistory(offset, PAGE_SIZE),
     refetchInterval: REFETCH_INTERVALS.FAST,
   });
-
-  // Filter requests based on search and status
-  const filteredRequests = requests?.filter((request) => {
-    const matchesSearch =
-      searchQuery === '' ||
-      request.prompt.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      request.response.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      request.model.toLowerCase().includes(searchQuery.toLowerCase());
-
-    // Filter by cache status (currently showing cached prompts only)
-    const matchesStatus = statusFilter === 'all' || statusFilter === 'hit';
-
-    return matchesSearch && matchesStatus;
+  const items = (data?.items || []).filter((item) => {
+    const matchesStatus = status === 'all' || (status === 'hit'
+      ? item.status === 'HIT'
+      : ['MISS', 'THRESHOLD_NOT_MET', 'EXPIRED', 'MODEL_MISMATCH', 'SYSTEM_MISMATCH'].includes(item.status));
+    return matchesStatus && `${item.prompt} ${item.model} ${item.request_id}`.toLowerCase().includes(search.toLowerCase());
   });
-
-  // Export to CSV
-  const handleExport = () => {
-    if (!filteredRequests) return;
-
-    const headers = ['Timestamp', 'Prompt', 'Response', 'Model', 'Hit Count', 'Cache ID'];
-    const rows = filteredRequests.map((req) => [
-      new Date(req.created_at).toISOString(),
-      `"${req.prompt.replace(/"/g, '""')}"`,
-      `"${req.response.replace(/"/g, '""')}"`,
-      req.model,
-      req.hit_count.toString(),
-      req.cache_id,
-    ]);
-
-    const csv = [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `driftcache-requests-${new Date().toISOString()}.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
+  const exportCsv = () => {
+    const rows = [
+      ['Timestamp', 'Request ID', 'Prompt', 'Model', 'Status', 'Similarity', 'Lookup latency (ms)'],
+      ...items.map((item) => [item.created_at, item.request_id, item.prompt, item.model, item.status, item.similarity ?? '', item.latency_ms ?? '']),
+    ];
+    const csv = rows.map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'driftcache-request-decisions.csv';
+    link.click();
+    URL.revokeObjectURL(url);
   };
-
-  if (isLoading) {
-    return <LoadingSpinner message="Loading requests..." />;
-  }
-
+  if (isLoading) return <LoadingSpinner message="Loading requests..." />;
+  if (error) return <div role="alert" className="bg-red-50 p-4">{getMetricsError(error)}</div>;
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Request Explorer</h1>
-          <p className="text-gray-600 mt-1">
-            Browse and search through recent cache requests
-          </p>
-        </div>
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={() => refetch()}
-            className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center"
-          >
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Refresh
-          </button>
-          <button
-            onClick={handleExport}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center"
-          >
-            <Download className="w-4 h-4 mr-2" />
-            Export CSV
-          </button>
-        </div>
+      <div className="flex justify-between">
+        <div><h1 className="text-3xl font-bold">Request Explorer</h1>
+          <p className="text-gray-600">Individual cache decisions from the last 24 hours, newest first.</p></div>
+        <button onClick={exportCsv} className="border rounded px-4 py-2">Export this page</button>
+        <button onClick={() => void refetch()} className="border rounded px-4 py-2">Refresh</button>
       </div>
-
-      {/* Top Cached Prompts */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">
-          Top Cached Prompts
-        </h2>
-        <div className="space-y-4">
-          {requests?.slice(0, 5).map((prompt) => (
-            <div
-              key={prompt.cache_id}
-              className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors"
-            >
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex-1">
-                  <p className="font-medium text-gray-900">{prompt.prompt}</p>
-                  <p className="text-sm text-gray-600 mt-1">{prompt.response}</p>
-                </div>
-                <div className="ml-4 text-right">
-                  <p className="text-2xl font-bold text-blue-600">{prompt.hit_count}</p>
-                  <p className="text-xs text-gray-500">hits</p>
-                </div>
-              </div>
-              <div className="flex items-center text-xs text-gray-500 space-x-4">
-                <span className="px-2 py-1 bg-gray-100 rounded">{prompt.model}</span>
-                <span>{new Date(prompt.created_at).toLocaleDateString()}</span>
-              </div>
-            </div>
-          ))}
-        </div>
+      <div className="flex gap-4 bg-white p-4 rounded">
+        <label>Search this page
+          <input className="border rounded px-3 py-2 ml-2" value={search} onChange={(event) => setSearch(event.target.value)} />
+        </label>
+        <label>Cache status
+          <select className="border rounded px-3 py-2 ml-2" value={status} onChange={(event) => setStatus(event.target.value)}>
+            <option value="all">All decisions</option><option value="hit">Cache hits</option><option value="miss">Cache misses</option>
+          </select>
+        </label>
       </div>
-
-      {/* Filters */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Search */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Search
-            </label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search prompts, responses, or models..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          {/* Status Filter */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Cache Status
-            </label>
-            <div className="relative">
-              <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as CacheStatusFilter)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
-              >
-                <option value="all">All Requests</option>
-                <option value="hit">Cache Hits</option>
-                <option value="miss">Cache Misses</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Results Count */}
-        <div className="mt-4 text-sm text-gray-600">
-          Showing {filteredRequests?.length || 0} of {requests?.length || 0} requests
-        </div>
+      <p>Showing {items.length} matching decisions on this page · {data?.total || 0} total decisions</p>
+      <div className="bg-white rounded overflow-x-auto">
+        <table className="min-w-full text-sm text-left">
+          <thead><tr>{['Timestamp', 'Prompt', 'Model', 'Status', 'Similarity', 'Lookup latency'].map((title) => <th key={title} className="p-3">{title}</th>)}</tr></thead>
+          <tbody>{items.map((item) => <tr key={item.event_id} className="border-t">
+            <td className="p-3">{new Date(item.created_at).toLocaleString()}</td>
+            <td className="p-3">{item.prompt}</td><td className="p-3">{item.model}</td>
+            <td className="p-3">{item.status}</td>
+            <td className="p-3">{item.similarity?.toFixed(3) ?? '—'}</td>
+            <td className="p-3">{item.latency_ms == null ? '—' : `${item.latency_ms.toFixed(1)} ms`}</td>
+          </tr>)}</tbody>
+        </table>
+        {!items.length && <p className="p-4">No requests found matching your criteria.</p>}
       </div>
-
-      {/* Request Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Timestamp
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Prompt
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Response
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Model
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Hit Count
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredRequests?.map((request, index) => (
-                <tr key={`${request.cache_id}-${index}`} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(request.created_at).toLocaleString()}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-900 max-w-md">
-                    <div className="truncate" title={request.prompt}>
-                      {request.prompt}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-600 max-w-md">
-                    <div className="truncate" title={request.response}>
-                      {request.response}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded">
-                      {request.model}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded font-medium">
-                      HIT
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-blue-600">
-                    {request.hit_count}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Empty State */}
-        {filteredRequests && filteredRequests.length === 0 && (
-          <div className="text-center py-12">
-            <Search className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-600">No requests found matching your criteria</p>
-          </div>
-        )}
-      </div>
-
-      {/* Stats Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Total Cached Entries</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                {requests?.length || 0}
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center">
-              <Search className="w-6 h-6 text-blue-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Total Cache Hits</p>
-              <p className="text-2xl font-bold text-green-600 mt-1">
-                {requests?.reduce((sum, r) => sum + r.hit_count, 0) || 0}
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-green-50 rounded-lg flex items-center justify-center">
-              <Filter className="w-6 h-6 text-green-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Average Hits per Entry</p>
-              <p className="text-2xl font-bold text-purple-600 mt-1">
-                {requests && requests.length > 0
-                  ? (requests.reduce((sum, r) => sum + r.hit_count, 0) / requests.length).toFixed(1)
-                  : '0'}
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-purple-50 rounded-lg flex items-center justify-center">
-              <RefreshCw className="w-6 h-6 text-purple-600" />
-            </div>
-          </div>
-        </div>
+      <div className="flex gap-4">
+        <button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>Previous</button>
+        <button disabled={offset + PAGE_SIZE >= (data?.total || 0)} onClick={() => setOffset(offset + PAGE_SIZE)}>Next</button>
       </div>
     </div>
   );

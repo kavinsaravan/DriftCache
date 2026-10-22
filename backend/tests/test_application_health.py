@@ -1,6 +1,7 @@
 """Tests for health metadata and scheduled vector cleanup helpers."""
 
 import pytest
+import json
 
 from app import main
 
@@ -65,7 +66,9 @@ async def test_health_degrades_when_default_provider_is_not_configured(monkeypat
 
     response = await main.health_check()
 
-    assert response["database"] == "connected"
-    assert response["redis"] == "connected"
-    assert response["llm"]["status"] == "not_configured"
-    assert response["status"] == "degraded"
+    payload = json.loads(response.body)
+    assert response.status_code == 503
+    assert payload["database"] == "connected"
+    assert payload["redis"] == "connected"
+    assert payload["llm"]["status"] == "not_configured"
+    assert payload["status"] == "degraded"

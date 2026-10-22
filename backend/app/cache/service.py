@@ -12,7 +12,6 @@ import logging
 from typing import Optional, List
 from datetime import datetime, timedelta
 import uuid
-import numpy as np
 
 from app.cache.decision import get_decision_engine, CacheDecisionEngine
 from app.cache.redis_store import get_redis_store, RedisStore
@@ -29,7 +28,6 @@ from app.models.cache_schemas import (
 from app.models.schemas import Message
 from app.core.config import settings
 from app.database.session import get_db_manager
-from app.services.threshold_config import get_active_threshold
 
 logger = logging.getLogger(__name__)
 
@@ -66,44 +64,7 @@ class CacheService:
         self.search_service = search_service or get_search_service()
         self.embedding_service = embedding_service or get_embedding_service()
 
-        # In-memory threshold cache to avoid DB query on every request
-        self._threshold_cache: dict = {}  # {tenant_id: (threshold, timestamp)}
-        self._threshold_cache_ttl = 30  # seconds
-
         logger.info("CacheService initialized (Redis mode)")
-
-    def _get_cached_threshold(self, tenant_id: str) -> float:
-        """
-        Get threshold from memory cache or DB
-
-        Caches threshold for 30 seconds to avoid DB query on every request.
-
-        Args:
-            tenant_id: Tenant ID
-
-        Returns:
-            Active threshold value
-        """
-        now = datetime.utcnow()
-
-        # Check cache
-        if tenant_id in self._threshold_cache:
-            threshold, timestamp = self._threshold_cache[tenant_id]
-            age_seconds = (now - timestamp).total_seconds()
-
-            if age_seconds < self._threshold_cache_ttl:
-                return threshold
-
-        # Cache miss or expired - query DB
-        db_manager = get_db_manager()
-        with db_manager.session_scope() as db:
-            threshold = get_active_threshold(db, tenant_id=tenant_id)
-
-        # Update cache
-        self._threshold_cache[tenant_id] = (threshold, now)
-
-        logger.debug(f"Threshold cache refreshed for tenant {tenant_id}: {threshold}")
-        return threshold
 
     async def check_cache(
         self,
@@ -111,7 +72,8 @@ class CacheService:
         model_name: str,
         tenant_id: str = "default",
         user_id: Optional[str] = None,
-        config: Optional[CacheConfig] = None
+        config: Optional[CacheConfig] = None,
+        request_params: Optional[dict] = None,
     ) -> CacheDecisionResult:
         """
         Check if a request can be served from cache
@@ -148,15 +110,14 @@ class CacheService:
             self.redis_store = await get_redis_store()
 
         # Extract cache key
-        cache_key = self._extract_cache_key(messages, model_name, tenant_id)
+        cache_key = self._extract_cache_key(
+            messages, model_name, tenant_id, request_params=request_params
+        )
 
-        # Get active threshold from cached value if no config provided
-        threshold = None
         if config:
             threshold = config.similarity_threshold
         else:
-            # Get from memory cache (refreshed from DB every 30s)
-            threshold = self._get_cached_threshold(tenant_id=tenant_id)
+            threshold = settings.SIMILARITY_THRESHOLD
 
         # Generate embedding (wrapped in threadpool to avoid blocking async event loop)
         embedding_text = cache_key.to_embedding_text(
@@ -178,7 +139,9 @@ class CacheService:
             tenant_id=tenant_id,
             system_prompt=cache_key.system_prompt,
             conversation_history=cache_key.conversation_history,
-            require_same_model=config.require_same_model if config else False
+            request_params=cache_key.request_params,
+            require_same_model=config.require_same_model if config else True,
+            include_below_threshold=True
         )
 
         # Get cached response from Redis if found
@@ -189,6 +152,7 @@ class CacheService:
         if cache_entry:
             similarity = cache_entry.similarity
 
+        if cache_entry and cache_entry.similarity >= threshold:
             # Use the cache key hash from the matched entry's metadata
             # This is critical: FAISS does semantic matching, then we use the
             # matched entry's stored hash to look up the exact response
@@ -211,9 +175,10 @@ class CacheService:
                         model_name=cache_entry.metadata.model_name,
                         embedding_vector=[],  # Not needed for serving
                         created_at=cache_entry.metadata.timestamp,
-                        expires_at=cache_entry.metadata.timestamp + timedelta(seconds=settings.CACHE_TTL_SECONDS),
+                        expires_at=cache_entry.metadata.expiration_time(),
                         tenant_id=cache_entry.metadata.tenant_id,
-                        system_prompt=cache_entry.metadata.system_prompt
+                        system_prompt=cache_entry.metadata.system_prompt,
+                        request_params=cache_entry.metadata.request_params,
                     )
                     retrieval_source = "metadata"
                     logger.debug(f"Redis miss, using metadata for {stored_cache_key_hash[:8]}...")
@@ -226,22 +191,31 @@ class CacheService:
                     model_name=cache_entry.metadata.model_name,
                     embedding_vector=[],
                     created_at=cache_entry.metadata.timestamp,
-                    expires_at=cache_entry.metadata.timestamp + timedelta(seconds=settings.CACHE_TTL_SECONDS),
+                    expires_at=cache_entry.metadata.expiration_time(),
                     tenant_id=cache_entry.metadata.tenant_id,
-                    system_prompt=cache_entry.metadata.system_prompt
+                    system_prompt=cache_entry.metadata.system_prompt,
+                    request_params=cache_entry.metadata.request_params,
                 )
                 retrieval_source = "metadata_legacy"
                 logger.debug("Using metadata for entry without cache_key_hash")
 
         # Make decision
-        decision_result = self.decision_engine.evaluate(
-            cached_response=cached_response,
-            similarity=similarity,
-            requested_model=model_name,
-            requested_system_prompt=cache_key.system_prompt,
-            tenant_id=tenant_id,
-            threshold=threshold
-        )
+        if similarity is not None and similarity < threshold:
+            # Preserve the observation without fetching or serving its response.
+            decision_result = CacheDecisionResult(
+                decision=CacheDecision.THRESHOLD_NOT_MET,
+                similarity=similarity,
+                reason=f"Similarity {similarity:.3f} < threshold {threshold}",
+            )
+        else:
+            decision_result = self.decision_engine.evaluate(
+                cached_response=cached_response,
+                similarity=similarity,
+                requested_model=model_name,
+                requested_system_prompt=cache_key.system_prompt,
+                tenant_id=tenant_id,
+                threshold=threshold,
+            )
         decision_result.retrieval_source = retrieval_source
 
         # Calculate latency
@@ -314,7 +288,9 @@ class CacheService:
             self.redis_store = await get_redis_store()
 
         # Extract cache key
-        cache_key = self._extract_cache_key(messages, model_name, tenant_id)
+        cache_key = self._extract_cache_key(
+            messages, model_name, tenant_id, request_params=request_params
+        )
 
         # Generate embedding (wrapped in threadpool to avoid blocking async event loop)
         from fastapi.concurrency import run_in_threadpool
@@ -329,7 +305,9 @@ class CacheService:
 
         # Create cache entry
         cache_id = str(uuid.uuid4())
-        ttl = ttl_seconds or settings.CACHE_TTL_SECONDS
+        ttl = settings.CACHE_TTL_SECONDS if ttl_seconds is None else ttl_seconds
+        if ttl <= 0:
+            raise ValueError("Cache TTL must be positive")
 
         cached_response = CachedResponse(
             cache_id=cache_id,
@@ -347,42 +325,42 @@ class CacheService:
 
         cache_key_hash = cache_key.to_cache_key_hash()
 
-        # Persist the searchable entry before exposing it through Redis. This
-        # closes the window where a process crash could leave a hot response
-        # with no durable FAISS vector.
-        vector_id = self.search_service.add_to_index(
-            embedding=embedding,
-            response_text=response_text,
-            model_name=model_name,
-            cache_id=cache_id,
-            tenant_id=tenant_id,
-            system_prompt=cache_key.system_prompt,
-            conversation_history=cache_key.conversation_history,
-            cache_key_hash=cache_key_hash,
-        )
-        try:
-            self.search_service.save_index()
-        except Exception:
-            self.search_service.faiss_index.remove_vectors(
-                np.asarray([vector_id], dtype=np.int64)
-            )
-            self.search_service.metadata_store.delete(vector_id)
-            raise
-
-        # Use the full request-derived hash as the Redis lookup key. The value
-        # itself retains the persistent UUID used by PostgreSQL analytics.
+        # Store the hot response first. If Redis rejects the write, do not add
+        # a searchable vector that would look successfully cached.
         await self.redis_store.set_cached_response(
             cache_id=cache_key_hash,
             response=cached_response,
             ttl_seconds=ttl,
         )
 
+        # The journal makes this vector durable without rewriting the complete
+        # FAISS index and metadata file for every cache miss.
+        try:
+            vector_id = self.search_service.add_to_index(
+                embedding=embedding,
+                response_text=response_text,
+                model_name=model_name,
+                cache_id=cache_id,
+                tenant_id=tenant_id,
+                system_prompt=cache_key.system_prompt,
+                conversation_history=cache_key.conversation_history,
+                cache_key_hash=cache_key_hash,
+                request_params=cache_key.request_params,
+                expires_at=cached_response.expires_at,
+            )
+        except Exception:
+            try:
+                await self.redis_store.delete_cached_response(cache_key_hash)
+            except Exception:
+                logger.exception("Failed to remove partial Redis cache write")
+            raise
+
         logger.info(
             f"Stored response in cache: cache_id={cache_id[:8]}..., "
-            f"ttl={ttl}s, stored=[redis+faiss+disk]"
+            f"ttl={ttl}s, stored=[redis+faiss+journal]"
         )
 
-        return CacheStoreResult(cache_id=cache_id, vector_id=vector_id)
+        return CacheStoreResult(cache_id=cache_id, vector_id=vector_id, expires_at=cached_response.expires_at)
 
     @staticmethod
     def _persistent_cache_id(cache_entry) -> str:
@@ -414,7 +392,8 @@ class CacheService:
         self,
         messages: List[Message],
         model_name: str,
-        tenant_id: str
+        tenant_id: str,
+        request_params: Optional[dict] = None,
     ) -> CacheKey:
         """
         Extract cache key from messages
@@ -430,12 +409,19 @@ class CacheService:
         Returns:
             CacheKey
         """
-        # Extract system prompt
-        system_prompt = None
-        for msg in messages:
-            if msg.role == "system":
-                system_prompt = msg.content
-                break  # Only one system message expected
+        # Preserve every system message and its position. Structured encoding
+        # keeps message boundaries distinct even when content contains delimiters.
+        import json
+
+        system_messages = [
+            {"position": index, "content": msg.content}
+            for index, msg in enumerate(messages)
+            if msg.role == "system"
+        ]
+        system_prompt = (
+            json.dumps(system_messages, ensure_ascii=False, separators=(",", ":"))
+            if system_messages else None
+        )
 
         # Find the last user message (the current query)
         last_user_idx = None
@@ -444,36 +430,28 @@ class CacheService:
                 last_user_idx = i
                 break
 
-        if last_user_idx is None:
-            # No user message found, shouldn't happen but handle gracefully
-            return CacheKey(
-                prompt_text="",
-                system_prompt=system_prompt,
-                conversation_history=None,
-                model_name=model_name,
-                tenant_id=tenant_id
-            )
+        prompt_text = messages[last_user_idx].content if last_user_idx is not None else ""
 
-        # The last user message is the query
-        prompt_text = messages[last_user_idx].content
-
-        # Build conversation history from all messages BEFORE the last user message
-        conversation_parts = []
-        for i, msg in enumerate(messages[:last_user_idx]):
-            if msg.role == "user":
-                conversation_parts.append(f"[USER] {msg.content}")
-            elif msg.role == "assistant":
-                conversation_parts.append(f"[ASSISTANT] {msg.content}")
-            # Skip system messages (already extracted separately)
-
-        conversation_history = " ".join(conversation_parts) if conversation_parts else None
+        # Only the current query is semantically matched. Everything else is
+        # exact context, including message roles, boundaries, order, and any
+        # assistant continuation after the last user message. The placeholder
+        # preserves the current query's position without requiring its exact text.
+        context_messages = [
+            {"role": msg.role, "content": None if index == last_user_idx else msg.content}
+            for index, msg in enumerate(messages)
+        ]
+        conversation_history = json.dumps(
+            {"version": 2, "query_index": last_user_idx, "messages": context_messages},
+            ensure_ascii=False, separators=(",", ":"), sort_keys=True,
+        )
 
         return CacheKey(
             prompt_text=prompt_text,
             system_prompt=system_prompt,
             conversation_history=conversation_history,
             model_name=model_name,
-            tenant_id=tenant_id
+            tenant_id=tenant_id,
+            request_params=request_params or {},
         )
 
     async def get_stats(self) -> dict:

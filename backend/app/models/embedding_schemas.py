@@ -9,13 +9,6 @@ from pydantic import BaseModel, ConfigDict, Field
 import hashlib
 
 
-class EmbeddingRequest(BaseModel):
-    """Request to generate an embedding"""
-    text: str
-    model: Optional[str] = None
-    normalize: bool = True
-
-
 class EmbeddingMetadata(BaseModel):
     """Metadata associated with an embedding"""
     prompt_hash: str = Field(..., description="Hash of the normalized prompt")
@@ -76,32 +69,6 @@ class Embedding(BaseModel):
         }
 
 
-class SimilarityResult(BaseModel):
-    """
-    Result from similarity search
-
-    Contains the matched embedding and similarity score
-    """
-    embedding: Embedding
-    similarity: float = Field(..., ge=0.0, le=1.0, description="Cosine similarity score")
-    rank: int = Field(..., ge=0, description="Rank in search results (0 = best match)")
-
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "embedding": {
-                    "vector": [0.13, -0.44, 0.82],
-                    "dimension": 384,
-                    "text": "What is caching?",
-                    "metadata": {"prompt_hash": "abc123..."}
-                },
-                "similarity": 0.94,
-                "rank": 0
-            }
-        }
-    )
-
-
 class EmbeddingBatch(BaseModel):
     """Batch of embeddings for bulk operations"""
     embeddings: List[Embedding]
@@ -110,11 +77,3 @@ class EmbeddingBatch(BaseModel):
 
     def __len__(self) -> int:
         return len(self.embeddings)
-
-
-class EmbeddingStats(BaseModel):
-    """Statistics about embeddings"""
-    total_embeddings: int
-    average_dimension: float
-    models_used: List[str]
-    date_range: tuple[Optional[datetime], Optional[datetime]] = (None, None)

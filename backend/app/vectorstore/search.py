@@ -11,6 +11,9 @@ Combines:
 import time
 import logging
 import os
+import json
+import threading
+from datetime import datetime
 from typing import List, Optional, Tuple
 import numpy as np
 
@@ -57,8 +60,98 @@ class SemanticSearchService:
         self.faiss_index = faiss_index or get_faiss_index()
         self.metadata_store = metadata_store or get_metadata_store()
         self.embedding_service = get_embedding_service()
+        self._lock = threading.RLock()
+        self._dirty = False
 
         logger.info("SemanticSearchService initialized")
+
+    @property
+    def write_lock(self):
+        """Expose the shared lock to maintenance and deployment operations."""
+        return self._lock
+
+    def _append_journal(
+        self, entries: List[Tuple[np.ndarray, VectorMetadata]]
+    ) -> None:
+        """Durably append one vector mutation batch between checkpoints."""
+        journal_path = f"{self.metadata_store.storage_path}.journal"
+        journal_dir = os.path.dirname(journal_path)
+        if journal_dir:
+            os.makedirs(journal_dir, exist_ok=True)
+        record = {
+            "entries": [
+                {
+                    "vector_id": metadata.vector_id,
+                    "vector": vector.reshape(-1).astype(float).tolist(),
+                    "metadata": metadata.to_dict(),
+                }
+                for vector, metadata in entries
+            ]
+        }
+        with open(journal_path, "a+", encoding="utf-8") as journal:
+            journal.seek(0, os.SEEK_END)
+            previous_size = journal.tell()
+            try:
+                journal.write(json.dumps(record, separators=(",", ":")) + "\n")
+                journal.flush()
+                os.fsync(journal.fileno())
+            except Exception:
+                journal.seek(previous_size)
+                journal.truncate()
+                journal.flush()
+                os.fsync(journal.fileno())
+                raise
+
+    def _truncate_journal(self) -> None:
+        journal_path = f"{self.metadata_store.storage_path}.journal"
+        temporary_path = f"{journal_path}.saving"
+        journal_dir = os.path.dirname(journal_path)
+        if journal_dir:
+            os.makedirs(journal_dir, exist_ok=True)
+        with open(temporary_path, "w", encoding="utf-8") as journal:
+            journal.flush()
+            os.fsync(journal.fileno())
+        os.replace(temporary_path, journal_path)
+
+    def mark_checkpointed(self) -> None:
+        """Mark an externally written atomic index snapshot as durable."""
+        with self._lock:
+            self._truncate_journal()
+            self._dirty = False
+
+    def _replay_journal(self) -> int:
+        journal_path = f"{self.metadata_store.storage_path}.journal"
+        if not os.path.exists(journal_path):
+            return 0
+
+        existing_ids = self.faiss_index.get_ids()
+        replayed = 0
+        with open(journal_path, encoding="utf-8") as journal:
+            for line_number, line in enumerate(journal, start=1):
+                if not line.strip():
+                    continue
+                try:
+                    record = json.loads(line)
+                    for entry in record["entries"]:
+                        vector_id = int(entry["vector_id"])
+                        metadata = VectorMetadata.from_dict(entry["metadata"])
+                        if vector_id not in existing_ids:
+                            self.faiss_index.add_vectors(
+                                np.asarray([entry["vector"]], dtype=np.float32),
+                                ids=np.asarray([vector_id], dtype=np.int64),
+                            )
+                            existing_ids.add(vector_id)
+                        self.metadata_store.add(metadata)
+                        replayed += 1
+                except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+                    logger.warning(
+                        "Ignoring malformed vector journal record at line %s",
+                        line_number,
+                    )
+        if replayed:
+            self._dirty = True
+            logger.info("Replayed %s vector journal records", replayed)
+        return replayed
 
     def add_to_index(
         self,
@@ -69,7 +162,9 @@ class SemanticSearchService:
         tenant_id: str = "default",
         system_prompt: Optional[str] = None,
         conversation_history: Optional[str] = None,
-        cache_key_hash: Optional[str] = None
+        cache_key_hash: Optional[str] = None,
+        request_params: Optional[dict] = None,
+        expires_at: Optional[datetime] = None,
     ) -> int:
         """
         Add an embedding to the search index
@@ -87,33 +182,38 @@ class SemanticSearchService:
         Returns:
             Vector ID assigned by FAISS
         """
-        # Convert to numpy array
-        vector = list_to_vector(embedding.vector).reshape(1, -1)
-
-        # Add to FAISS index
-        vector_ids = self.faiss_index.add_vectors(vector)
-        vector_id = int(vector_ids[0])
-
-        # Create metadata
-        metadata = VectorMetadata(
-            vector_id=vector_id,
-            cache_id=cache_id,
-            prompt_id=embedding.metadata.prompt_hash,
-            prompt_text=embedding.text,
-            response_text=response_text,
-            model_name=model_name,
-            embedding_model=self.embedding_service.model.model_name,
-            tenant_id=tenant_id,
-            system_prompt=system_prompt,
-            conversation_history=conversation_history,
-            cache_key_hash=cache_key_hash,
-            timestamp=embedding.metadata.timestamp,
-            request_params=embedding.metadata.request_params,
-            cache_hits=0
-        )
-
-        # Add to metadata store
-        self.metadata_store.add(metadata)
+        with self._lock:
+            vector = list_to_vector(embedding.vector).reshape(1, -1)
+            vector_ids = self.faiss_index.add_vectors(vector)
+            vector_id = int(vector_ids[0])
+            metadata = VectorMetadata(
+                vector_id=vector_id,
+                cache_id=cache_id,
+                prompt_id=embedding.metadata.prompt_hash,
+                prompt_text=embedding.text,
+                response_text=response_text,
+                model_name=model_name,
+                embedding_model=self.embedding_service.model.model_name,
+                tenant_id=tenant_id,
+                system_prompt=system_prompt,
+                conversation_history=conversation_history,
+                cache_key_hash=cache_key_hash,
+                timestamp=embedding.metadata.timestamp,
+                expires_at=expires_at,
+                request_params=request_params or {},
+                cache_hits=0,
+            )
+            metadata.expires_at = metadata.expiration_time()
+            self.metadata_store.add(metadata)
+            try:
+                self._append_journal([(vector, metadata)])
+            except Exception:
+                self.faiss_index.remove_vectors(
+                    np.asarray([vector_id], dtype=np.int64)
+                )
+                self.metadata_store.delete(vector_id)
+                raise
+            self._dirty = True
 
         logger.info(
             f"Added to index: vector_id={vector_id}, "
@@ -146,38 +246,50 @@ class SemanticSearchService:
         if len(embeddings) != len(responses):
             raise ValueError("Number of embeddings must match number of responses")
 
-        # Convert to numpy array
-        vectors = np.array([emb.vector for emb in embeddings], dtype=np.float32)
-
-        # Add to FAISS
-        vector_ids = self.faiss_index.add_vectors(vectors)
-
-        # Create metadata
-        metadata_list = []
-        for i, (embedding, response) in enumerate(zip(embeddings, responses)):
-            metadata = VectorMetadata(
-                vector_id=int(vector_ids[i]),
-                prompt_id=embedding.metadata.prompt_hash,
-                prompt_text=embedding.text,
-                response_text=response,
-                model_name=model_name,
-                embedding_model=self.embedding_service.model.model_name,
-                tenant_id=tenant_id,
-                system_prompt=system_prompt,
-                timestamp=embedding.metadata.timestamp,
-                request_params=embedding.metadata.request_params,
-                cache_hits=0
-            )
-            metadata_list.append(metadata)
-
-        # Add to metadata store
-        self.metadata_store.add_batch(metadata_list)
+        with self._lock:
+            vectors = np.array([emb.vector for emb in embeddings], dtype=np.float32)
+            vector_ids = self.faiss_index.add_vectors(vectors)
+            metadata_list = []
+            for i, (embedding, response) in enumerate(zip(embeddings, responses)):
+                metadata = VectorMetadata(
+                    vector_id=int(vector_ids[i]),
+                    prompt_id=embedding.metadata.prompt_hash,
+                    prompt_text=embedding.text,
+                    response_text=response,
+                    model_name=model_name,
+                    embedding_model=self.embedding_service.model.model_name,
+                    tenant_id=tenant_id,
+                    system_prompt=system_prompt,
+                    timestamp=embedding.metadata.timestamp,
+                    request_params=embedding.metadata.request_params,
+                    cache_hits=0,
+                )
+                metadata.expires_at = metadata.expiration_time()
+                metadata_list.append(metadata)
+            self.metadata_store.add_batch(metadata_list)
+            try:
+                self._append_journal(list(zip(vectors, metadata_list)))
+            except Exception:
+                self.faiss_index.remove_vectors(vector_ids.astype(np.int64))
+                for metadata in metadata_list:
+                    self.metadata_store.delete(metadata.vector_id)
+                raise
+            self._dirty = True
 
         logger.info(f"Added batch of {len(embeddings)} embeddings to index")
 
         return [int(vid) for vid in vector_ids]
 
     def search(
+        self,
+        query_embedding: Embedding,
+        top_k: int = 5,
+        threshold: Optional[float] = None,
+    ) -> SearchResults:
+        with self._lock:
+            return self._search_unlocked(query_embedding, top_k, threshold)
+
+    def _search_unlocked(
         self,
         query_embedding: Embedding,
         top_k: int = 5,
@@ -258,7 +370,34 @@ class SemanticSearchService:
         tenant_id: Optional[str] = None,
         system_prompt: Optional[str] = None,
         conversation_history: Optional[str] = None,
-        require_same_model: bool = False
+        request_params: Optional[dict] = None,
+        require_same_model: bool = True,
+        include_below_threshold: bool = False,
+    ) -> Optional[CacheEntry]:
+        with self._lock:
+            return self._get_cache_entry_unlocked(
+                query_embedding=query_embedding,
+                threshold=threshold,
+                model_name=model_name,
+                tenant_id=tenant_id,
+                system_prompt=system_prompt,
+                conversation_history=conversation_history,
+                request_params=request_params,
+                require_same_model=require_same_model,
+                include_below_threshold=include_below_threshold,
+            )
+
+    def _get_cache_entry_unlocked(
+        self,
+        query_embedding: Embedding,
+        threshold: Optional[float] = None,
+        model_name: Optional[str] = None,
+        tenant_id: Optional[str] = None,
+        system_prompt: Optional[str] = None,
+        conversation_history: Optional[str] = None,
+        request_params: Optional[dict] = None,
+        require_same_model: bool = True,
+        include_below_threshold: bool = False,
     ) -> Optional[CacheEntry]:
         """
         Get best cache match for a query
@@ -277,7 +416,7 @@ class SemanticSearchService:
         Returns:
             CacheEntry if match found, None otherwise
         """
-        threshold = threshold or settings.SIMILARITY_THRESHOLD
+        threshold = settings.SIMILARITY_THRESHOLD if threshold is None else threshold
 
         # Search for top candidates (not just top-1)
         # This allows filtering and picking the best valid match
@@ -287,7 +426,10 @@ class SemanticSearchService:
         retry_count = 0
 
         while retry_count <= max_retries:
-            results = self.search(query_embedding, top_k=top_k, threshold=threshold)
+            results = self.search(
+                query_embedding, top_k=top_k,
+                threshold=None if include_below_threshold else threshold,
+            )
 
             # Filter candidates for valid matches
             valid_candidates = []
@@ -313,13 +455,14 @@ class SemanticSearchService:
                 if conversation_history != metadata.conversation_history:
                     continue
 
+                # Sampling and stopping parameters affect the provider response
+                # and must match exactly before a response can be reused.
+                if (request_params or {}) != metadata.request_params:
+                    continue
+
                 # Check TTL expiration
-                if metadata.timestamp:
-                    from datetime import datetime, timedelta
-                    ttl_seconds = settings.CACHE_TTL_SECONDS
-                    expiration = metadata.timestamp + timedelta(seconds=ttl_seconds)
-                    if datetime.utcnow() > expiration:
-                        continue
+                if metadata.is_expired():
+                    continue
 
                 valid_candidates.append((result, metadata))
 
@@ -343,8 +486,11 @@ class SemanticSearchService:
         # Get the best valid candidate (highest similarity)
         best_result, best_metadata = valid_candidates[0]
 
-        # Increment cache hit counter
-        self.metadata_store.increment_cache_hit(best_result.vector_id)
+        # Below-threshold candidates are observations, never cache hits.
+        is_hit = best_result.similarity >= threshold
+        if is_hit:
+            self.metadata_store.increment_cache_hit(best_result.vector_id)
+            self._dirty = True
 
         # Create cache entry
         cache_entry = CacheEntry(
@@ -354,11 +500,11 @@ class SemanticSearchService:
             response_text=best_result.response_text or "",
             similarity=best_result.similarity,
             metadata=best_metadata,
-            is_cache_hit=True
+            is_cache_hit=is_hit
         )
 
         logger.info(
-            f"Cache HIT: similarity={best_result.similarity:.3f}, "
+            f"Cache candidate: similarity={best_result.similarity:.3f}, "
             f"vector_id={best_result.vector_id} "
             f"(filtered {len(results.results) - len(valid_candidates)} invalid candidates)"
         )
@@ -388,28 +534,34 @@ class SemanticSearchService:
         Args:
             index_path: Optional custom path for FAISS index
         """
-        # Default path from settings
-        if index_path is None:
-            index_path = settings.get_index_path()
+        with self._lock:
+            if index_path is None:
+                index_path = settings.get_index_path()
 
-        metadata_path = self.metadata_store.storage_path
-        temporary_index_path = f"{index_path}.saving"
-        temporary_metadata_path = f"{metadata_path}.saving"
+            metadata_path = self.metadata_store.storage_path
+            temporary_index_path = f"{index_path}.saving"
+            temporary_metadata_path = f"{metadata_path}.saving"
+            try:
+                self.faiss_index.save(temporary_index_path)
+                self.metadata_store.save(temporary_metadata_path)
+                os.replace(temporary_metadata_path, metadata_path)
+                os.replace(temporary_index_path, index_path)
+                self._truncate_journal()
+                self._dirty = False
+            finally:
+                for temporary_path in (temporary_index_path, temporary_metadata_path):
+                    if os.path.exists(temporary_path):
+                        os.remove(temporary_path)
 
-        # Build both files before replacing either live file. Metadata is
-        # replaced first because extra metadata is harmless, while an index
-        # entry without metadata cannot be served correctly.
-        try:
-            self.faiss_index.save(temporary_index_path)
-            self.metadata_store.save(temporary_metadata_path)
-            os.replace(temporary_metadata_path, metadata_path)
-            os.replace(temporary_index_path, index_path)
-        finally:
-            for temporary_path in (temporary_index_path, temporary_metadata_path):
-                if os.path.exists(temporary_path):
-                    os.remove(temporary_path)
+            logger.info("Saved index and metadata checkpoint")
 
-        logger.info(f"Saved index and metadata")
+    def save_if_dirty(self) -> bool:
+        """Write an atomic checkpoint only when in-memory state changed."""
+        with self._lock:
+            if not self._dirty:
+                return False
+            self.save_index()
+            return True
 
     def load_index(self, index_path: Optional[str] = None) -> None:
         """
@@ -418,20 +570,19 @@ class SemanticSearchService:
         Args:
             index_path: Optional custom path for FAISS index
         """
-        # Default path from settings
-        if index_path is None:
-            index_path = settings.get_index_path()
+        with self._lock:
+            if index_path is None:
+                index_path = settings.get_index_path()
 
-        # Load FAISS index
-        try:
-            self.faiss_index.load(index_path)
-        except FileNotFoundError:
-            logger.warning(f"FAISS index not found at {index_path}")
+            try:
+                self.faiss_index.load(index_path)
+            except FileNotFoundError:
+                logger.warning(f"FAISS index not found at {index_path}")
 
-        # Load metadata
-        self.metadata_store.load()
+            self.metadata_store.load()
+            self._replay_journal()
 
-        logger.info("Loaded index and metadata")
+            logger.info("Loaded index, metadata, and pending journal entries")
 
     def remove_expired_vectors(self, ttl_seconds: Optional[int] = None) -> int:
         """
@@ -443,33 +594,27 @@ class SemanticSearchService:
         Returns:
             Number of vectors removed
         """
-        from datetime import datetime, timedelta
         from app.core.config import settings
 
         if ttl_seconds is None:
             ttl_seconds = settings.CACHE_TTL_SECONDS
 
-        now = datetime.utcnow()
-        expired_vector_ids = []
-
-        # Find expired entries in metadata
-        for vector_id, metadata in self.metadata_store.metadata.items():
-            if metadata.timestamp:
-                age_seconds = (now - metadata.timestamp).total_seconds()
-                if age_seconds > ttl_seconds:
+        with self._lock:
+            now = datetime.utcnow()
+            expired_vector_ids = []
+            for vector_id, metadata in self.metadata_store.metadata.items():
+                if metadata.is_expired(now, ttl_seconds):
                     expired_vector_ids.append(vector_id)
 
-        if not expired_vector_ids:
-            logger.info("No expired vectors to remove")
-            return 0
+            if not expired_vector_ids:
+                logger.info("No expired vectors to remove")
+                return 0
 
-        # Remove from FAISS index
-        expired_ids_array = np.array(expired_vector_ids, dtype=np.int64)
-        self.faiss_index.remove_vectors(expired_ids_array)
-
-        # Remove from metadata
-        for vector_id in expired_vector_ids:
-            self.metadata_store.delete(vector_id)
+            expired_ids_array = np.array(expired_vector_ids, dtype=np.int64)
+            self.faiss_index.remove_vectors(expired_ids_array)
+            for vector_id in expired_vector_ids:
+                self.metadata_store.delete(vector_id)
+            self._dirty = True
 
         logger.info(f"Removed {len(expired_vector_ids)} expired vectors from index")
 
@@ -477,13 +622,22 @@ class SemanticSearchService:
 
     def clear_index(self) -> None:
         """Clear all data from index"""
-        self.faiss_index.reset()
-        self.metadata_store.clear()
+        with self._lock:
+            self.faiss_index.reset()
+            self.metadata_store.clear()
+            self._dirty = True
+            self.save_index()
         logger.info("Cleared index and metadata")
 
     def rebuild_with_embedding_model(self, embedding_model: EmbeddingModel) -> int:
+        with self._lock:
+            return self._rebuild_with_embedding_model_unlocked(embedding_model)
+
+    def _rebuild_with_embedding_model_unlocked(
+        self, embedding_model: EmbeddingModel
+    ) -> int:
         """Re-embed every live entry, persist it, and switch models as one cutover."""
-        current_metadata = self.metadata_store.get_all()
+        current_metadata = [m for m in self.metadata_store.get_all() if not m.is_expired()]
         new_index = FAISSIndex(
             dimension=embedding_model.dimension,
             index_type=settings.VECTOR_INDEX_TYPE,
@@ -530,6 +684,8 @@ class SemanticSearchService:
         set_embedding_model(embedding_model)
         settings.EMBEDDING_MODEL = embedding_model.model_name
         settings.EMBEDDING_DIMENSION = embedding_model.dimension
+        self._truncate_journal()
+        self._dirty = False
 
         logger.info(
             "Deployed embedding model %s and rebuilt %s vectors",

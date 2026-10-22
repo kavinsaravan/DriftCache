@@ -66,29 +66,6 @@ Benchmark results are saved to `results/`:
 - `load_test_<timestamp>.json` - Load test results
 - `latest_benchmark.json` - Most recent benchmark (symlink)
 
-## API Endpoints
-
-The backend provides benchmark endpoints:
-
-```bash
-# Get latest benchmark summary
-GET /benchmark/summary
-
-# Get detailed stats
-GET /benchmark/stats
-
-# Run quick benchmark
-POST /benchmark/quick
-{
-  "num_requests": 100,
-  "test_semantic_matching": true,
-  "test_hard_negatives": true
-}
-
-# Health check
-GET /benchmark/health
-```
-
 ## Key Metrics
 
 ### Cache Performance

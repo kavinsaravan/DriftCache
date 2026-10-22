@@ -57,7 +57,19 @@ class AnthropicProvider(BaseProvider):
         """Map friendly model names to actual Claude model IDs"""
         return self.model_mapping.get(model, model)
 
-    def _convert_messages(self, messages: List[Message]) -> tuple[str, List[Dict[str, str]]]:
+    @staticmethod
+    def _normalize_finish_reason(reason: Optional[str]) -> Optional[str]:
+        """Only positively identified normal endings are safe to cache."""
+        return {
+            "end_turn": "stop",
+            "stop_sequence": "stop",
+            "max_tokens": "length",
+            "model_context_window_exceeded": "length",
+            "tool_use": "tool_calls",
+            "refusal": "content_filter",
+        }.get(reason)
+
+    def _convert_messages(self, messages: List[Message]) -> tuple[List[Dict[str, str]], List[Dict[str, str]]]:
         """
         Convert OpenAI-style messages to Claude format
 
@@ -66,12 +78,12 @@ class AnthropicProvider(BaseProvider):
         Returns:
             (system_prompt, messages_list)
         """
-        system_prompt = ""
+        system_prompt = []
         claude_messages = []
 
         for msg in messages:
             if msg.role == "system":
-                system_prompt = msg.content
+                system_prompt.append({"type": "text", "text": msg.content})
             else:
                 claude_messages.append({
                     "role": msg.role,
@@ -88,6 +100,9 @@ class AnthropicProvider(BaseProvider):
         max_tokens: Optional[int] = None,
         top_p: float = 1.0,
         stream: bool = False,
+        stop: Optional[str | List[str]] = None,
+        presence_penalty: float = 0.0,
+        frequency_penalty: float = 0.0,
         **kwargs
     ) -> ChatCompletionResponse:
         """Generate a non-streaming chat completion using Claude"""
@@ -97,6 +112,8 @@ class AnthropicProvider(BaseProvider):
 
         claude_model = self._map_model(model)
         system_prompt, claude_messages = self._convert_messages(messages)
+        if presence_penalty or frequency_penalty:
+            raise ValueError("Anthropic models do not support presence_penalty or frequency_penalty")
 
         # Build API parameters
         api_params = {
@@ -111,7 +128,9 @@ class AnthropicProvider(BaseProvider):
             api_params["top_p"] = top_p
         # Only include system parameter if it has a value
         if system_prompt:
-            api_params["system"] = [{"type": "text", "text": system_prompt}]
+            api_params["system"] = system_prompt
+        if stop:
+            api_params["stop_sequences"] = [stop] if isinstance(stop, str) else stop
 
         # Call Claude API
         response: ClaudeMessage = await self.client.messages.create(**api_params)
@@ -139,7 +158,7 @@ class AnthropicProvider(BaseProvider):
                         role="assistant",
                         content=content
                     ),
-                    finish_reason=response.stop_reason or "stop"
+                    finish_reason=self._normalize_finish_reason(response.stop_reason)
                 )
             ],
             usage=UsageInfo(
@@ -156,6 +175,9 @@ class AnthropicProvider(BaseProvider):
         temperature: float = 1.0,
         max_tokens: Optional[int] = None,
         top_p: float = 1.0,
+        stop: Optional[str | List[str]] = None,
+        presence_penalty: float = 0.0,
+        frequency_penalty: float = 0.0,
         **kwargs
     ) -> AsyncIterator[str]:
         """Generate a streaming chat completion using Claude"""
@@ -165,6 +187,8 @@ class AnthropicProvider(BaseProvider):
 
         claude_model = self._map_model(model)
         system_prompt, claude_messages = self._convert_messages(messages)
+        if presence_penalty or frequency_penalty:
+            raise ValueError("Anthropic models do not support presence_penalty or frequency_penalty")
 
         completion_id = f"chatcmpl-{int(time.time())}"
         created_time = int(time.time())
@@ -182,7 +206,9 @@ class AnthropicProvider(BaseProvider):
             stream_params["top_p"] = top_p
         # Only include system parameter if it has a value
         if system_prompt:
-            stream_params["system"] = [{"type": "text", "text": system_prompt}]
+            stream_params["system"] = system_prompt
+        if stop:
+            stream_params["stop_sequences"] = [stop] if isinstance(stop, str) else stop
 
         # Stream from Claude API
         async with self.client.messages.stream(**stream_params) as stream:
@@ -203,9 +229,15 @@ class AnthropicProvider(BaseProvider):
             )
             yield f"data: {initial_chunk.model_dump_json()}\n\n"
 
-            # Stream content chunks
+            # A transport EOF is not proof of a complete model response.
+            stop_reason = None
+            message_stopped = False
             async for event in stream:
-                if event.type == "content_block_delta":
+                if event.type == "message_delta":
+                    stop_reason = getattr(event.delta, "stop_reason", None) or stop_reason
+                elif event.type == "message_stop":
+                    message_stopped = True
+                elif event.type == "content_block_delta":
                     if hasattr(event.delta, 'text'):
                         chunk = ChatCompletionStreamResponse(
                             id=completion_id,
@@ -222,7 +254,10 @@ class AnthropicProvider(BaseProvider):
                         )
                         yield f"data: {chunk.model_dump_json()}\n\n"
 
-            # Send final chunk
+            if not message_stopped:
+                raise RuntimeError("Anthropic stream ended before message_stop")
+
+            # Preserve truncation/refusal/unknown outcomes for cache eligibility.
             final_chunk = ChatCompletionStreamResponse(
                 id=completion_id,
                 object="chat.completion.chunk",
@@ -232,7 +267,7 @@ class AnthropicProvider(BaseProvider):
                     ChatCompletionStreamChoice(
                         index=0,
                         delta=DeltaMessage(),
-                        finish_reason="stop"
+                        finish_reason=self._normalize_finish_reason(stop_reason)
                     )
                 ]
             )

@@ -10,7 +10,7 @@ Handles Server-Sent Events (SSE) streaming for LLM responses with:
 import json
 import time
 import logging
-from typing import AsyncIterator, Optional, List, Dict, Any
+from typing import AsyncIterator, Optional
 from dataclasses import dataclass, field
 
 from app.models.schemas import (
@@ -59,25 +59,6 @@ class SSEFormatter:
 
     Converts data into SSE format for streaming responses
     """
-
-    @staticmethod
-    def format_event(data: str, event: Optional[str] = None) -> str:
-        """
-        Format data as an SSE event
-
-        Args:
-            data: The data payload
-            event: Optional event name
-
-        Returns:
-            Formatted SSE string
-        """
-        lines = []
-        if event:
-            lines.append(f"event: {event}")
-        lines.append(f"data: {data}")
-        lines.append("")  # Empty line terminates the event
-        return "\n".join(lines) + "\n"
 
     @staticmethod
     def format_chunk(chunk: ChatCompletionStreamResponse) -> str:
@@ -206,49 +187,6 @@ class StreamCollector:
             yield SSEFormatter.format_error(str(e))
             raise
 
-    def get_collected_response(self) -> Optional[StreamedResponse]:
-        """
-        Get the collected response
-
-        Returns:
-            StreamedResponse if completed, None otherwise
-        """
-        if self.completed:
-            return self.response
-        return None
-
-
-async def stream_with_heartbeat(
-    stream: AsyncIterator[str],
-    heartbeat_interval: int = 15
-) -> AsyncIterator[str]:
-    """
-    Add heartbeat comments to keep connection alive
-
-    Some proxies close connections if no data is sent for a while.
-    SSE comments (lines starting with :) prevent this.
-
-    Args:
-        stream: Original stream
-        heartbeat_interval: Seconds between heartbeats
-
-    Yields:
-        Stream chunks with periodic heartbeats
-    """
-    import asyncio
-
-    last_heartbeat = time.time()
-
-    async for chunk in stream:
-        yield chunk
-
-        # Send heartbeat if needed
-        current_time = time.time()
-        if current_time - last_heartbeat > heartbeat_interval:
-            yield ": heartbeat\n\n"
-            last_heartbeat = current_time
-
-
 async def create_cached_stream(
     content: str,
     model: str,
@@ -329,42 +267,3 @@ async def create_cached_stream(
     )
     yield SSEFormatter.format_chunk(final_chunk)
     yield SSEFormatter.format_done()
-
-
-# Utility functions
-
-def estimate_tokens(text: str) -> int:
-    """
-    Rough token estimation
-
-    This is approximate. Real tokenization requires the specific model's tokenizer.
-
-    Args:
-        text: Text to estimate
-
-    Returns:
-        Estimated token count
-    """
-    # Rough estimate: ~4 characters per token
-    return len(text) // 4
-
-
-def parse_sse_chunk(chunk_str: str) -> Optional[Dict[str, Any]]:
-    """
-    Parse an SSE chunk into JSON
-
-    Args:
-        chunk_str: SSE-formatted chunk
-
-    Returns:
-        Parsed JSON dict or None
-    """
-    try:
-        if chunk_str.startswith("data: "):
-            json_str = chunk_str[6:].strip()
-            if json_str == "[DONE]":
-                return {"done": True}
-            return json.loads(json_str)
-    except Exception as e:
-        logger.warning(f"Failed to parse SSE chunk: {e}")
-    return None

@@ -3,15 +3,6 @@ set -e
 
 echo "Starting DriftCache API..."
 
-# Extract database connection details from DATABASE_URL if needed
-if [ -n "$DATABASE_URL" ]; then
-    echo "DATABASE_URL found, extracting connection details..."
-    # Parse postgres://user:pass@host:port/dbname
-    export DATABASE_HOST=$(echo $DATABASE_URL | sed -e 's/.*@\(.*\):.*/\1/')
-    export DATABASE_PORT=$(echo $DATABASE_URL | sed -e 's/.*:\([0-9]*\)\/.*/\1/')
-    export DATABASE_USER=$(echo $DATABASE_URL | sed -e 's/.*\/\/\(.*\):.*/\1/')
-fi
-
 # Wait for PostgreSQL with timeout (max 60 seconds)
 if [ -n "$DATABASE_URL" ]; then
     echo "Waiting for PostgreSQL to be ready..."
@@ -35,9 +26,7 @@ if [ -n "$REDIS_URL" ]; then
     echo "Waiting for Redis to be ready..."
     timeout=30
     counter=0
-    # Extract host from REDIS_URL
-    REDIS_HOST=$(echo $REDIS_URL | sed -e 's/redis:\/\/\(.*\):.*/\1/')
-    until redis-cli -h "$REDIS_HOST" ping > /dev/null 2>&1 || [ $counter -eq $timeout ]; do
+    until redis-cli -u "$REDIS_URL" ping > /dev/null 2>&1 || [ $counter -eq $timeout ]; do
         echo "Redis is unavailable - sleeping (${counter}s/${timeout}s)"
         sleep 2
         counter=$((counter + 2))

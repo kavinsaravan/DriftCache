@@ -132,8 +132,7 @@ class CacheRepository:
         matched_cache_id: Optional[str] = None,
         similarity_score: Optional[float] = None,
         latency_ms: Optional[float] = None,
-        retrieval_source: Optional[str] = None,
-        threshold_version_id: Optional[int] = None
+        retrieval_source: Optional[str] = None
     ) -> CacheEvent:
         """
         Create a cache event record
@@ -148,7 +147,6 @@ class CacheRepository:
             similarity_score: Similarity score (for hits)
             latency_ms: Cache lookup latency
             retrieval_source: "redis" or "legacy"
-            threshold_version_id: Link to threshold version
 
         Returns:
             Created CacheEvent object
@@ -162,8 +160,7 @@ class CacheRepository:
             matched_cache_id=matched_cache_id,
             similarity_score=similarity_score,
             latency_ms=latency_ms,
-            retrieval_source=retrieval_source,
-            threshold_version_id=threshold_version_id
+            retrieval_source=retrieval_source
         )
 
         self.session.add(event)
