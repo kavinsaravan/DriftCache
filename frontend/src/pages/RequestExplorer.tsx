@@ -1,3 +1,4 @@
+import { useAccount } from '../context/AccountContext';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getRequestHistory, getMetricsError } from '../api/metricsApi';
@@ -6,11 +7,13 @@ import { REFETCH_INTERVALS } from '../utils/constants';
 
 const PAGE_SIZE = 100;
 export default function RequestExplorer() {
+  const account = useAccount();
+  const scope = account?.signedIn ? account.projectId : 'key-access';
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
   const [offset, setOffset] = useState(0);
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['request-explorer', offset],
+    queryKey: ['request-explorer', scope, offset],
     queryFn: () => getRequestHistory(offset, PAGE_SIZE),
     refetchInterval: REFETCH_INTERVALS.FAST,
   });

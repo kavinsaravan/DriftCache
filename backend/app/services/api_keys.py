@@ -40,12 +40,14 @@ def create_project_with_key(
     session: Session,
     name: str,
     key_name: str = "default",
+    owner_id: str | None = None,
 ) -> tuple[Project, ProjectAPIKey, str]:
     """Create an isolated project and its first API key."""
     project_id = str(uuid.uuid4())
     project = Project(
         id=project_id,
         name=name,
+        owner_id=owner_id,
         tenant_id=f"project:{project_id}",
     )
     raw_key = generate_api_key()

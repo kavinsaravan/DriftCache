@@ -1,3 +1,4 @@
+import { useAccount } from '../context/AccountContext';
 /**
  * Dashboard Overview Page
  *
@@ -40,8 +41,10 @@ import {
 } from 'recharts';
 
 export default function Dashboard() {
+  const account = useAccount();
+  const scope = account?.signedIn ? account.projectId : 'key-access';
   const { data, isLoading, error } = useQuery<DashboardData>({
-    queryKey: ['dashboard', '24h'],
+    queryKey: ['dashboard', scope, '24h'],
     queryFn: () => getDashboardData('24h'),
     refetchInterval: REFETCH_INTERVALS.FAST,
   });
@@ -51,7 +54,7 @@ export default function Dashboard() {
     isLoading: isHitRateLoading,
     error: hitRateError,
   } = useQuery<TimeSeriesDataPoint[]>({
-    queryKey: ['timeseries', 'hit_rate', '24h'],
+    queryKey: ['timeseries', scope, 'hit_rate', '24h'],
     queryFn: () => getTimeSeries('hit_rate', '24h', '1h'),
     refetchInterval: REFETCH_INTERVALS.FAST,
   });

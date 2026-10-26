@@ -103,6 +103,63 @@ make benchmark
 Use `API_BASE_URL=https://your-host` for a remote API and export
 `DRIFTCACHE_API_KEY` when authentication is enabled.
 
+### User accounts and application keys
+
+Open **Applications** in the dashboard to create an account or sign in with an
+email and a password of at least 12 characters. Each user can:
+
+1. Create an application and save its initial `dc_live_...` key (shown once).
+2. Create additional named keys or revoke old keys for applications they own.
+3. Select an application in the top bar to view only its dashboard and requests.
+
+Set the application key as `DRIFTCACHE_API_KEY` on your AI application's server.
+Point the OpenAI-compatible client at your DriftCache URL ending in `/api/v1`,
+and use `DRIFTCACHE_API_KEY` as the client's API key. Requests sent directly to
+OpenAI or another provider do not appear in DriftCache. The upstream provider
+is still configured by the DriftCache operator; these project keys identify
+applications within DriftCache, rather than provision separate provider accounts.
+The Applications page includes a Python integration example.
+
+The dashboard uses a separate, revocable account session to manage applications
+and read their metrics. Sessions expire after seven days, remain in the current
+tab's session storage, and are revoked on sign-out. Passwords use salted
+PBKDF2-SHA256; session and application tokens are stored only as hashes. Register
+and login requests share a database-backed limit of 20 attempts per client IP
+per 15 minutes. Account sessions cannot call inference or administrator APIs.
+Existing administrator-managed projects remain unowned and are not exposed to
+newly registered users. Project keys continue to work in the existing-key field.
+Email verification and password recovery are not included in this version.
+
+Deployment:
+
+- Keep `REQUIRE_API_KEY=true` on the backend; disabling it permits unauthenticated
+  administrator access and is only suitable for isolated development.
+- Use persistent PostgreSQL storage for accounts, ownership and keys. The backend
+  automatically applies migration `014` on startup; it preserves existing projects.
+- Deploy the backend before the frontend. Set Vercel's `VITE_API_URL` to the full
+  HTTPS backend URL ending in `/api/v1` and redeploy the frontend.
+- Restrict backend CORS to your dashboard origin using `CORS_ORIGINS` and
+  `ALLOW_ALL_VERCEL=false`. Serve both services over HTTPS.
+
+Self-service endpoints (all paths below are relative to `/api/v1`):
+
+```text
+POST   /account/register
+POST   /account/login
+GET    /account/me
+POST   /account/logout
+GET    /account/projects
+POST   /account/projects
+GET    /account/projects/{project_id}/keys
+POST   /account/projects/{project_id}/keys
+DELETE /account/projects/{project_id}/keys/{key_id}
+```
+
+Account endpoints use `Authorization: Bearer <session token>`. For metrics,
+include `X-Project-ID` with the owned application's ID; the backend verifies
+ownership and derives the tenant from that project, ignoring caller-supplied
+tenant overrides. Application API keys derive the tenant directly from the key.
+
 ### Create a project key
 
 Use the bootstrap `API_KEY` to create one isolated project credential for each

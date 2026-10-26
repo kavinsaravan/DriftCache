@@ -5,6 +5,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.database.base import Base
+from app.models.account import User  # Register the referenced users table.
 
 
 class Project(Base):
@@ -14,6 +15,7 @@ class Project(Base):
 
     id = Column(String(36), primary_key=True)
     name = Column(String(100), nullable=False)
+    owner_id = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)
     tenant_id = Column(String(100), unique=True, nullable=False, index=True)
     is_active = Column(Boolean, nullable=False, default=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

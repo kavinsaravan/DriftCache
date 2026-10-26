@@ -4,6 +4,7 @@
  * Connects to DriftCache backend metrics endpoints
  */
 import axios from 'axios';
+import { API_BASE_URL, getProject, getSession } from './accountApi';
 import {
   mockDashboardData,
   mockTimeSeriesHitRate,
@@ -11,7 +12,6 @@ import {
   mockTopCachedPrompts
 } from './mockData';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 export const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA === 'true';
 
 const metricsApi = axios.create({
@@ -29,13 +29,15 @@ export const setMetricsKey = (key: string): void => {
   else sessionStorage.removeItem(KEY_STORAGE);
 };
 metricsApi.interceptors.request.use((config) => {
-  const key = getMetricsKey();
+  const key = getSession() || getMetricsKey();
+  if (getSession() && getProject()) config.headers.set('X-Project-ID', getProject());
   if (key) config.headers.set('Authorization', `Bearer ${key}`);
   return config;
 });
 
 export const getMetricsError = (error: unknown): string => {
   if (axios.isAxiosError(error) && [401, 403].includes(error.response?.status || 0)) {
+    if (getSession()) return 'Your session may have expired. Sign out and sign in again.';
     return 'Access denied. Enter a valid metrics or project API key above.';
   }
   return 'Unable to load data. Check the API connection and try again.';

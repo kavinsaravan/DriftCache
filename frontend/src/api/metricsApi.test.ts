@@ -20,6 +20,23 @@ describe('metrics client', () => {
     await api.get('/summary');
     expect(credentials).toEqual(['Bearer dc_live_test', undefined]);
   });
+  it('scopes account metrics to the selected application without sending a saved application key', async () => {
+    const { default: api, setMetricsKey } = await import('./metricsApi');
+    const { saveSession, saveProject } = await import('./accountApi');
+    const sent: unknown[] = [];
+    api.defaults.adapter = async config => {
+      sent.push([config.headers.get('Authorization'), config.headers.get('X-Project-ID')]);
+      return {data: {}, status: 200, statusText: 'OK', headers: {}, config};
+    };
+    setMetricsKey('dc_live_old'); saveSession('dc_session_account'); saveProject('project-one');
+    await api.get('/dashboard');
+    saveProject('project-two'); await api.get('/dashboard');
+    saveSession(''); saveProject(''); await api.get('/dashboard');
+    expect(sent).toEqual([
+      ['Bearer dc_session_account', 'project-one'], ['Bearer dc_session_account', 'project-two'],
+      ['Bearer dc_live_old', undefined],
+    ]);
+  });
   it('propagates auth and network failures instead of returning sample data', async () => {
     const { default: api, getDashboardData, getRequestHistory, getTimeSeries, getTopCachedPrompts, getMetricsError } = await import('./metricsApi');
     const failure = new AxiosError('Unauthorized', 'ERR_BAD_REQUEST', undefined, undefined, { status: 401 } as never);

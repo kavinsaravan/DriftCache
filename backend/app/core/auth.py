@@ -7,7 +7,11 @@ Accepts both Authorization: Bearer and X-API-Key headers
 import secrets
 import logging
 from typing import Optional
-from fastapi import HTTPException, Security
+from fastapi import Depends, Header, HTTPException, Security
+from sqlalchemy.orm import Session
+from app.database.session import get_db
+from app.models.project import Project
+from app.services.accounts import SESSION_PREFIX, session_user
 from fastapi.concurrency import run_in_threadpool
 from fastapi.security import APIKeyHeader, HTTPBearer, HTTPAuthorizationCredentials
 from app.core.config import settings
@@ -138,7 +142,9 @@ async def verify_admin_key(
 
 async def verify_metrics_key(
     x_api_key: Optional[str] = Security(api_key_header),
-    bearer: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme)
+    bearer: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
+    x_project_id: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
 ) -> AuthContext:
     """
     Verify API key for metrics/dashboard endpoints (read-only)
@@ -158,6 +164,20 @@ async def verify_metrics_key(
     Raises:
         HTTPException: If API key is invalid or missing
     """
+    # Account sessions always enforce ownership, including in development mode.
+    provided_key = _extract_api_key(x_api_key, bearer)
+    if provided_key and provided_key.startswith(SESSION_PREFIX):
+        user = await run_in_threadpool(session_user, db, provided_key)
+        def owned_context():
+            project = db.query(Project).filter(
+                Project.id == x_project_id, Project.owner_id == user.id,
+                Project.is_active.is_(True),
+            ).first()
+            if project is None:
+                raise HTTPException(404, "Select one of your applications")
+            return AuthContext(tenant_id=project.tenant_id, project_id=project.id, is_metrics_only=True)
+        return await run_in_threadpool(owned_context)
+
     # Skip check if not required (development mode)
     if not settings.REQUIRE_API_KEY:
         return AuthContext(tenant_id="default", is_admin=True)

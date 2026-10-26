@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useAccount } from '../context/AccountContext';
+import { accountError } from '../api/accountApi';
+import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { getMetricsKey, setMetricsKey, USE_MOCK_DATA } from '../api/metricsApi';
 /**
@@ -6,7 +8,7 @@ import { getMetricsKey, setMetricsKey, USE_MOCK_DATA } from '../api/metricsApi';
  *
  * Main application layout with navigation
  */
-import { Link, Outlet, useLocation } from 'react-router-dom';
+import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Database,
@@ -15,13 +17,20 @@ import {
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Requests', href: '/requests', icon: Database },
+  { name: 'Applications', href: '/applications', icon: Database },
 ];
 
 export default function Layout() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const account = useAccount();
+  const [accountFailure, setAccountFailure] = useState('');
   const queryClient = useQueryClient();
   const [key, setKey] = useState(getMetricsKey);
   const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    if (account?.signedIn) { setKey(''); setSaved(false); }
+  }, [account?.signedIn]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -69,12 +78,24 @@ export default function Layout() {
       <div className="pl-64">
         {/* Top Bar */}
         <div className="bg-white border-b border-gray-200 px-8 py-4">
-          {USE_MOCK_DATA ? <p className="text-amber-800">Demo mode — showing sample data.</p> : (
-            <form className="flex items-center gap-3" onSubmit={(event) => {
+          {USE_MOCK_DATA && account?.signedIn && <p className="text-amber-800 mb-3">Demo mode — showing sample data.</p>}
+          {account?.signedIn ? <div className="flex items-center gap-4">
+            <span className="text-sm text-gray-600">{account.user?.email || 'Account'}</span>
+            <label className="text-sm">Application <select aria-label="Application" className="border rounded px-3 py-2 ml-2" value={account.projectId} onChange={e => account.selectProject(e.target.value)}>
+              {!account.projects.length && <option value="">Create an application</option>}
+              {account.projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
+            </select></label>
+            <button className="text-blue-700" onClick={() => { setAccountFailure(''); void account.logout().catch(error => setAccountFailure(accountError(error))); }}>Sign out</button>
+            {accountFailure && <p role="alert" className="text-red-700">{accountFailure}</p>}
+          </div> : USE_MOCK_DATA ? <p className="text-amber-800">Demo mode — showing sample data.</p> : (
+            <details open={location.pathname !== '/applications'}>
+            <summary className="text-sm text-gray-600 cursor-pointer">Use an existing API key</summary>
+            <form className="flex items-center gap-3 mt-3" onSubmit={(event) => {
               event.preventDefault();
               setMetricsKey(key);
               setSaved(true);
               void queryClient.resetQueries();
+              if (key.trim()) navigate('/');
             }}>
               <label htmlFor="metrics-key" className="text-sm">Metrics or project API key</label>
               <input id="metrics-key" type="password" autoComplete="off" value={key}
@@ -83,12 +104,18 @@ export default function Layout() {
               <button type="submit" className="bg-blue-600 text-white rounded px-3 py-2">Apply key</button>
               <span className="text-sm text-gray-500" role="status">{saved ? 'Key applied.' : 'Stored for this tab only.'}</span>
             </form>
+            </details>
           )}
         </div>
 
         {/* Page Content */}
         <main className="p-8">
-          <Outlet />
+          {account?.loading ? <p>Loading your account…</p> :
+            location.pathname !== '/applications' && !USE_MOCK_DATA &&
+            ((account?.signedIn && !account.projectId) || (!account?.signedIn && !getMetricsKey())) ?
+            <Navigate to="/applications" replace /> :
+            <Outlet key={account?.user?.id || 'key-access'} />}
+
         </main>
       </div>
     </div>
