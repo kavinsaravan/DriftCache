@@ -103,62 +103,79 @@ make benchmark
 Use `API_BASE_URL=https://your-host` for a remote API and export
 `DRIFTCACHE_API_KEY` when authentication is enabled.
 
-### User accounts and application keys
+### Key-based workspaces
 
-Open **Applications** in the dashboard to create an account or sign in with an
-email and a password of at least 12 characters. Each user can:
+Open **Workspace** in the dashboard and select **Create my workspace**. Enter a
+workspace label and save the generated `dc_live_...` API key, shown once. Select
+**I saved it — open workspace** to connect. No email or password is required.
+Returning users select **Connect with key**; the label is descriptive only and
+cannot be used to find, claim or recover a workspace.
 
-1. Create an application and save its initial `dc_live_...` key (shown once).
-2. Create additional named keys or revoke old keys for applications they own.
-3. Select an application in the top bar to view only its dashboard and requests.
+The same key connects the dashboard and SDK to that workspace. The backend
+verifies the key and derives its tenant; client-supplied workspace IDs and tenant
+overrides cannot grant access to another workspace. Every workspace key can read
+that workspace's data and manage its keys. Treat it as a secret on your
+application's server. Only a hash is stored in the database. There is no recovery
+if all valid keys are lost. Creating another workspace with the same label
+creates a new, empty workspace with a different key and tenant.
 
-Set the application key as `DRIFTCACHE_API_KEY` on your AI application's server.
-Point the OpenAI-compatible client at your DriftCache URL ending in `/api/v1`,
-and use `DRIFTCACHE_API_KEY` as the client's API key. Requests sent directly to
-OpenAI or another provider do not appear in DriftCache. The upstream provider
-is still configured by the DriftCache operator; these project keys identify
-applications within DriftCache, rather than provision separate provider accounts.
-The Applications page includes a Python integration example.
+Keys can be created and revoked on the Workspace page. To rotate the connection
+key, save a new key, disconnect, connect with the new key, then revoke the old
+one. Revoking the key currently authenticating the request is rejected to avoid
+accidental lockout. **Disconnect** clears the current tab's key and cached data;
+it does not revoke the key used by an application. Refreshing restores the
+connection from the tab's session storage; closing the tab ends that local
+connection. Keys are not placed in URLs or frontend build variables.
 
-The dashboard uses a separate, revocable account session to manage applications
-and read their metrics. Sessions expire after seven days, remain in the current
-tab's session storage, and are revoked on sign-out. Passwords use salted
-PBKDF2-SHA256; session and application tokens are stored only as hashes. Register
-and login requests share a database-backed limit of 20 attempts per client IP
-per 15 minutes. Account sessions cannot call inference or administrator APIs.
-Existing administrator-managed projects remain unowned and are not exposed to
-newly registered users. Project keys continue to work in the existing-key field.
-Email verification and password recovery are not included in this version.
+Existing project keys also connect to their own workspace and can manage its
+keys. The bootstrap administrator and shared metrics credentials cannot manage
+workspaces through the self-service API. A shared metrics key still works in
+the dashboard's **Use an existing API key** field for read-only default-tenant
+metrics. The legacy `/account` endpoints and database records remain available
+for existing integrations; the dashboard no longer uses account sessions.
 
-Deployment:
+Set `DRIFTCACHE_API_KEY` on your AI application's server to the workspace key.
+Point an OpenAI-compatible client at your backend URL ending in `/api/v1`.
+Requests sent directly to an AI provider do not appear in DriftCache. The
+upstream provider is configured by the DriftCache operator; creating a workspace
+key does not create a separate Anthropic or OpenAI account.
 
-- Keep `REQUIRE_API_KEY=true` on the backend; disabling it permits unauthenticated
-  administrator access and is only suitable for isolated development.
-- Use persistent PostgreSQL storage for accounts, ownership and keys. The backend
-  automatically applies migration `014` on startup; it preserves existing projects.
-- Deploy the backend before the frontend. Set Vercel's `VITE_API_URL` to the full
-  HTTPS backend URL ending in `/api/v1` and redeploy the frontend.
-- Restrict backend CORS to your dashboard origin using `CORS_ORIGINS` and
-  `ALLOW_ALL_VERCEL=false`. Serve both services over HTTPS.
+The Workspace page loads its Python example from the backend's `DEFAULT_MODEL`
+and provider configuration. A missing provider shows setup guidance instead of
+an example for an unrelated provider. `GET /api/v1/models` advertises the default
+model plus the optional `ADDITIONAL_MODELS` JSON list, filtered to configured
+providers. This is a configuration catalogue, not a live credential/access check.
 
-Self-service endpoints (all paths below are relative to `/api/v1`):
-
-```text
-POST   /account/register
-POST   /account/login
-GET    /account/me
-POST   /account/logout
-GET    /account/projects
-POST   /account/projects
-GET    /account/projects/{project_id}/keys
-POST   /account/projects/{project_id}/keys
-DELETE /account/projects/{project_id}/keys/{key_id}
+```env
+DEFAULT_MODEL=claude-sonnet-5-5
+ADDITIONAL_MODELS=["claude-haiku-5-5"]
 ```
 
-Account endpoints use `Authorization: Bearer <session token>`. For metrics,
-include `X-Project-ID` with the owned application's ID; the backend verifies
-ownership and derives the tenant from that project, ignoring caller-supplied
-tenant overrides. Application API keys derive the tenant directly from the key.
+Existing environment variables override repository defaults. Update Railway's
+`DEFAULT_MODEL` if it points to an older model. Deploy the backend before the
+frontend and set Vercel's `VITE_API_URL` to the full HTTPS backend URL ending in
+`/api/v1`. Use persistent PostgreSQL storage and keep `REQUIRE_API_KEY=true` in
+production. Restrict CORS to your dashboard origin with `CORS_ORIGINS` and
+`ALLOW_ALL_VERCEL=false`. No additional schema migration is needed for the
+workspace flow; historical migrations and existing data are preserved. Public
+workspace creation shares the database-backed authentication throttle of 20
+attempts per client IP per 15 minutes.
+
+Self-service endpoints (relative to `/api/v1`):
+
+```text
+POST   /workspaces
+GET    /workspaces/current
+GET    /workspaces/integration
+GET    /workspaces/current/keys
+POST   /workspaces/current/keys
+DELETE /workspaces/current/keys/{key_id}
+```
+
+Only workspace creation is public. The other endpoints require
+`Authorization: Bearer <workspace key>`, even if development authentication is
+disabled. A project API key continues to authenticate chat and metrics requests
+without any account session or `X-Project-ID` header.
 
 ### Create a project key
 

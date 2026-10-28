@@ -85,7 +85,8 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = Field(default="")
     OPENAI_API_KEY: str = Field(default="")
     OLLAMA_BASE_URL: str = Field(default="http://localhost:11434")
-    DEFAULT_MODEL: str = Field(default="claude-3-5-sonnet-20241022")
+    DEFAULT_MODEL: str = Field(default="claude-sonnet-5-5")
+    ADDITIONAL_MODELS: List[str] = Field(default_factory=list, description="Extra deployment-enabled model IDs advertised by /models")
 
     # Semantic Cache Settings
     SIMILARITY_THRESHOLD: float = Field(default=0.85, ge=0.0, le=1.0)

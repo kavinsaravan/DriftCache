@@ -4,7 +4,7 @@
  * Connects to DriftCache backend metrics endpoints
  */
 import axios from 'axios';
-import { API_BASE_URL, getProject, getSession } from './accountApi';
+import { API_BASE_URL, getWorkspaceKey, saveWorkspaceKey } from './workspaceApi';
 import {
   mockDashboardData,
   mockTimeSeriesHitRate,
@@ -22,23 +22,17 @@ const metricsApi = axios.create({
 });
 
 // User-supplied credentials remain scoped to this browser tab, never the build.
-const KEY_STORAGE = 'driftcache.metrics-key';
-export const getMetricsKey = (): string => sessionStorage.getItem(KEY_STORAGE) || '';
-export const setMetricsKey = (key: string): void => {
-  if (key.trim()) sessionStorage.setItem(KEY_STORAGE, key.trim());
-  else sessionStorage.removeItem(KEY_STORAGE);
-};
+export const getMetricsKey = getWorkspaceKey;
+export const setMetricsKey = saveWorkspaceKey;
 metricsApi.interceptors.request.use((config) => {
-  const key = getSession() || getMetricsKey();
-  if (getSession() && getProject()) config.headers.set('X-Project-ID', getProject());
+  const key = getMetricsKey();
   if (key) config.headers.set('Authorization', `Bearer ${key}`);
   return config;
 });
 
 export const getMetricsError = (error: unknown): string => {
   if (axios.isAxiosError(error) && [401, 403].includes(error.response?.status || 0)) {
-    if (getSession()) return 'Your session may have expired. Sign out and sign in again.';
-    return 'Access denied. Enter a valid metrics or project API key above.';
+    return 'Access denied. Connect with a valid workspace key, or apply a metrics key above.';
   }
   return 'Unable to load data. Check the API connection and try again.';
 };

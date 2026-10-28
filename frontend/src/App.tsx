@@ -6,7 +6,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Applications from './pages/Applications';
-import { AccountProvider } from './context/AccountContext';
+import { WorkspaceProvider } from './context/WorkspaceProvider';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import RequestExplorer from './pages/RequestExplorer';
@@ -25,7 +25,7 @@ const queryClient = new QueryClient({
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AccountProvider>
+      <WorkspaceProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Layout />}>
@@ -35,7 +35,7 @@ function App() {
           </Route>
         </Routes>
       </BrowserRouter>
-      </AccountProvider>
+      </WorkspaceProvider>
     </QueryClientProvider>
   );
 }

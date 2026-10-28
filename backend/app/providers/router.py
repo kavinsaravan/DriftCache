@@ -12,6 +12,7 @@ from typing import AsyncIterator, List, Optional
 import logging
 
 from app.providers.base import BaseProvider
+from app.core.model_catalog import available_models
 from app.providers.openai_provider import OpenAIProvider
 from app.providers.anthropic_provider import AnthropicProvider
 from app.providers.ollama_provider import OllamaProvider
@@ -218,10 +219,7 @@ class ProviderRouter:
         Returns:
             List of model identifiers
         """
-        models = []
-        for provider in self.providers:
-            models.extend(provider.get_available_models())
-        return list(set(models))  # Remove duplicates
+        return available_models()
 
     def get_provider_for_model(self, model: str) -> Optional[str]:
         """

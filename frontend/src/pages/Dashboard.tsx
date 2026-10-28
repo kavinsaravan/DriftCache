@@ -1,4 +1,4 @@
-import { useAccount } from '../context/AccountContext';
+import { useWorkspace } from '../context/workspaceState';
 /**
  * Dashboard Overview Page
  *
@@ -41,8 +41,7 @@ import {
 } from 'recharts';
 
 export default function Dashboard() {
-  const account = useAccount();
-  const scope = account?.signedIn ? account.projectId : 'key-access';
+  const scope = useWorkspace()?.workspace?.id || 'key-access';
   const { data, isLoading, error } = useQuery<DashboardData>({
     queryKey: ['dashboard', scope, '24h'],
     queryFn: () => getDashboardData('24h'),

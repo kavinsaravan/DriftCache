@@ -20,21 +20,20 @@ describe('metrics client', () => {
     await api.get('/summary');
     expect(credentials).toEqual(['Bearer dc_live_test', undefined]);
   });
-  it('scopes account metrics to the selected application without sending a saved application key', async () => {
+  it('uses the workspace key and never sends a legacy account session or tenant selector', async () => {
     const { default: api, setMetricsKey } = await import('./metricsApi');
-    const { saveSession, saveProject } = await import('./accountApi');
+    sessionStorage.setItem('driftcache.account-session', 'dc_session_old');
+    sessionStorage.setItem('driftcache.account-project', 'someone-else');
     const sent: unknown[] = [];
     api.defaults.adapter = async config => {
       sent.push([config.headers.get('Authorization'), config.headers.get('X-Project-ID')]);
       return {data: {}, status: 200, statusText: 'OK', headers: {}, config};
     };
-    setMetricsKey('dc_live_old'); saveSession('dc_session_account'); saveProject('project-one');
-    await api.get('/dashboard');
-    saveProject('project-two'); await api.get('/dashboard');
-    saveSession(''); saveProject(''); await api.get('/dashboard');
+    setMetricsKey('dc_live_one'); await api.get('/dashboard');
+    setMetricsKey('dc_live_two'); await api.get('/dashboard');
+    setMetricsKey(''); await api.get('/dashboard');
     expect(sent).toEqual([
-      ['Bearer dc_session_account', 'project-one'], ['Bearer dc_session_account', 'project-two'],
-      ['Bearer dc_live_old', undefined],
+      ['Bearer dc_live_one', undefined], ['Bearer dc_live_two', undefined], [undefined, undefined],
     ]);
   });
   it('propagates auth and network failures instead of returning sample data', async () => {
@@ -44,7 +43,7 @@ describe('metrics client', () => {
     for (const call of [getDashboardData, getRequestHistory, () => getTimeSeries('hit_rate'), getTopCachedPrompts]) {
       await expect(call()).rejects.toBe(failure);
     }
-    expect(getMetricsError(failure)).toContain('valid metrics or project API key');
+    expect(getMetricsError(failure)).toContain('valid workspace key');
     api.defaults.adapter = async () => { throw new Error('offline'); };
     await expect(getDashboardData()).rejects.toThrow('offline');
   });

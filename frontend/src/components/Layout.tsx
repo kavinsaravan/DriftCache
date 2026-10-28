@@ -1,5 +1,4 @@
-import { useAccount } from '../context/AccountContext';
-import { accountError } from '../api/accountApi';
+import { useWorkspace } from '../context/workspaceState';
 import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { getMetricsKey, setMetricsKey, USE_MOCK_DATA } from '../api/metricsApi';
@@ -17,20 +16,19 @@ import {
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Requests', href: '/requests', icon: Database },
-  { name: 'Applications', href: '/applications', icon: Database },
+  { name: 'Workspace', href: '/applications', icon: Database },
 ];
 
 export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const account = useAccount();
-  const [accountFailure, setAccountFailure] = useState('');
+  const connection = useWorkspace();
   const queryClient = useQueryClient();
   const [key, setKey] = useState(getMetricsKey);
   const [saved, setSaved] = useState(false);
   useEffect(() => {
-    if (account?.signedIn) { setKey(''); setSaved(false); }
-  }, [account?.signedIn]);
+    if (connection?.workspace) { setKey(''); setSaved(false); }
+  }, [connection?.workspace]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -78,15 +76,11 @@ export default function Layout() {
       <div className="pl-64">
         {/* Top Bar */}
         <div className="bg-white border-b border-gray-200 px-8 py-4">
-          {USE_MOCK_DATA && account?.signedIn && <p className="text-amber-800 mb-3">Demo mode — showing sample data.</p>}
-          {account?.signedIn ? <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600">{account.user?.email || 'Account'}</span>
-            <label className="text-sm">Application <select aria-label="Application" className="border rounded px-3 py-2 ml-2" value={account.projectId} onChange={e => account.selectProject(e.target.value)}>
-              {!account.projects.length && <option value="">Create an application</option>}
-              {account.projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
-            </select></label>
-            <button className="text-blue-700" onClick={() => { setAccountFailure(''); void account.logout().catch(error => setAccountFailure(accountError(error))); }}>Sign out</button>
-            {accountFailure && <p role="alert" className="text-red-700">{accountFailure}</p>}
+          {USE_MOCK_DATA && connection?.workspace && <p className="text-amber-800 mb-3">Demo mode — showing sample data.</p>}
+          {connection?.workspace ? <div className="flex items-center gap-4">
+            <span className="font-medium">{connection.workspace.name}</span>
+            <span className="text-sm text-gray-500">Workspace connected</span>
+            <button className="text-blue-700" onClick={() => connection.disconnect()}>Disconnect</button>
           </div> : USE_MOCK_DATA ? <p className="text-amber-800">Demo mode — showing sample data.</p> : (
             <details open={location.pathname !== '/applications'}>
             <summary className="text-sm text-gray-600 cursor-pointer">Use an existing API key</summary>
@@ -110,11 +104,11 @@ export default function Layout() {
 
         {/* Page Content */}
         <main className="p-8">
-          {account?.loading ? <p>Loading your account…</p> :
+          {connection?.loading ? <p>Loading your workspace…</p> :
             location.pathname !== '/applications' && !USE_MOCK_DATA &&
-            ((account?.signedIn && !account.projectId) || (!account?.signedIn && !getMetricsKey())) ?
+            (!connection?.workspace && !getMetricsKey()) ?
             <Navigate to="/applications" replace /> :
-            <Outlet key={account?.user?.id || 'key-access'} />}
+            <Outlet key={connection?.workspace?.id || 'key-access'} />}
 
         </main>
       </div>

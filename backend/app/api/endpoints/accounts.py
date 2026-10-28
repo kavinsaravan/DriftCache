@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.database.session import get_db
+from app.core.model_catalog import integration_configuration
 from app.models.account import AuthAttempt, User, UserSession
 from app.models.project import Project, ProjectAPIKey
 from app.models.project_schemas import (
@@ -54,7 +55,7 @@ def throttle(request: Request, db: Session) -> None:
     attempts = db.query(AuthAttempt).filter(AuthAttempt.client_hash == client_hash).count()
     if attempts >= 20:
         db.commit()
-        raise HTTPException(429, "Too many sign-in attempts. Try again in 15 minutes.", headers={"Retry-After": "900"})
+        raise HTTPException(429, "Too many authentication or workspace creation attempts. Try again in 15 minutes.", headers={"Retry-After": "900"})
     db.add(AuthAttempt(client_hash=client_hash, created_at=datetime.now(timezone.utc)))
     db.commit()
 
@@ -90,6 +91,18 @@ def login(body: Credentials, request: Request, response: Response, db: Session =
 @router.get("/me", response_model=AccountResponse)
 def me(user: User = Depends(current_user)):
     return AccountResponse(id=user.id, email=user.email)
+
+
+class IntegrationConfiguration(BaseModel):
+    default_model: str
+    default_provider: str | None
+    configured: bool
+    available_models: list[str]
+
+
+@router.get("/integration", response_model=IntegrationConfiguration)
+def integration(user: User = Depends(current_user)):
+    return integration_configuration()
 
 
 @router.post("/logout", status_code=204)

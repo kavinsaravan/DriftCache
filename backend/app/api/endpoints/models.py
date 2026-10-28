@@ -5,7 +5,7 @@ import time
 from fastapi import APIRouter
 
 from app.models.schemas import ModelsListResponse, ModelInfo
-from app.providers.router import provider_router
+from app.core.model_catalog import available_models
 
 router = APIRouter()
 
@@ -15,12 +15,13 @@ async def list_models():
     """
     List available models (OpenAI-compatible)
 
-    Returns all models supported across all configured providers
+    Returns deployment-selected models whose provider is configured.
+    This does not validate upstream credentials or model access.
     """
     created_time = int(time.time())
 
-    # Get all available models from the provider router
-    available_model_ids = provider_router.get_available_models()
+    # Advertise models selected by the deployment, not a static provider catalogue.
+    available_model_ids = available_models()
 
     models = [
         ModelInfo(

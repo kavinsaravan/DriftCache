@@ -8,6 +8,7 @@ from anthropic import AsyncAnthropic
 from anthropic.types import Message as ClaudeMessage
 
 from app.core.config import settings
+from app.core.model_catalog import available_models
 from app.providers.base import BaseProvider
 from app.models.schemas import (
     Message,
@@ -47,7 +48,7 @@ class AnthropicProvider(BaseProvider):
 
     def get_available_models(self) -> List[str]:
         """Get list of Claude models supported"""
-        return self.supported_models
+        return [model for model in available_models() if model.startswith("claude-")]
 
     def supports_model(self, model: str) -> bool:
         """Check if this provider supports the given model"""

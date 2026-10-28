@@ -12,6 +12,7 @@ from app.models.request import Request as RequestRecord
 from app.models.cache_event import CacheEvent, CacheStatus
 from app.api.endpoints.accounts import router
 from app.api.endpoints.projects import router as admin_router
+from app.api.endpoints.workspaces import router as workspace_router
 from app.core import auth
 from app.database.base import Base
 from app.database.session import get_db
@@ -41,6 +42,7 @@ def account_app(monkeypatch):
     app.include_router(router, prefix='/api/v1')
     app.include_router(admin_router, prefix='/api/v1')
     app.include_router(metrics_router, prefix='/api/v1')
+    app.include_router(workspace_router, prefix='/api/v1')
     app.dependency_overrides[get_db] = db
     @app.get('/metrics-scope')
     def scope(context=Depends(auth.verify_metrics_key)):
@@ -155,3 +157,111 @@ def test_dashboard_and_request_history_only_show_selected_owned_application(acco
         assert dashboard.status_code == 200, dashboard.text
         assert dashboard.json()['summary']['total_requests'] == 1
     assert client.get('/api/v1/metrics/requests', headers={**alice, 'X-Project-ID': apps[2]['project_id']}).status_code == 404
+
+
+def test_account_integration_settings_require_login_and_hide_secrets(account_app, monkeypatch):
+    client, _ = account_app
+    monkeypatch.setattr(auth.settings, 'DEFAULT_MODEL', 'claude-sonnet-5-5')
+    monkeypatch.setattr(auth.settings, 'ANTHROPIC_API_KEY', 'private-provider-secret')
+    monkeypatch.setattr(auth.settings, 'OPENAI_API_KEY', '')
+    monkeypatch.setattr(auth.settings, 'ADDITIONAL_MODELS', [])
+    assert client.get('/api/v1/account/integration').status_code == 401
+    owner = register(client, 'alice@example.com')
+    response = client.get('/api/v1/account/integration', headers=owner)
+    assert response.status_code == 200
+    assert response.json() == {
+        'default_model': 'claude-sonnet-5-5', 'default_provider': 'anthropic',
+        'configured': True, 'available_models': ['claude-sonnet-5-5'],
+    }
+    assert 'private-provider-secret' not in response.text
+
+
+def create_workspace(client, name='My bot'):
+    response = client.post('/api/v1/workspaces', json={'name': name})
+    assert response.status_code == 201, response.text
+    assert response.headers['cache-control'] == 'no-store'
+    data = response.json()
+    return data, {'Authorization': 'Bearer ' + data['api_key']}
+
+
+def test_workspaces_create_without_accounts_and_use_keys_for_identity(account_app):
+    client, factory = account_app
+    alice, alice_headers = create_workspace(client, 'Same label')
+    bob, bob_headers = create_workspace(client, 'Same label')
+    assert alice['project_id'] != bob['project_id']
+    assert alice['tenant_id'] != bob['tenant_id']
+    assert alice['api_key'] != bob['api_key']
+    with factory() as db:
+        assert db.query(User).count() == 0
+        assert db.query(UserSession).count() == 0
+        assert authenticate_project_key(db, alice['api_key']).tenant_id == alice['tenant_id']
+        assert all(key.key_hash != alice['api_key'] for key in db.query(ProjectAPIKey))
+    current = client.get('/api/v1/workspaces/current', headers=alice_headers, params={'project_id': bob['project_id']})
+    assert current.status_code == 200
+    assert current.json()['id'] == alice['project_id']
+    assert 'api_key' not in current.json()
+    keys = client.get('/api/v1/workspaces/current/keys', headers=alice_headers).json()
+    assert len(keys) == 1 and keys[0]['project_id'] == alice['project_id']
+    assert 'api_key' not in keys[0] and 'key_hash' not in keys[0]
+    assert client.delete('/api/v1/workspaces/current/keys/' + bob['api_key_id'], headers=alice_headers).status_code == 404
+    assert client.get('/application-scope', headers=alice_headers).json()['tenant_id'] == alice['tenant_id']
+    assert client.get('/api/v1/projects', headers=alice_headers).status_code == 403
+    assert client.get('/api/v1/workspaces/current', headers=bob_headers).json()['id'] == bob['project_id']
+
+
+def test_workspace_rotation_and_current_key_lockout_protection(account_app):
+    client, _ = account_app
+    original, headers = create_workspace(client)
+    path = '/api/v1/workspaces/current/keys'
+    assert client.delete(path + '/' + original['api_key_id'], headers=headers).status_code == 409
+    response = client.post(path, headers=headers, json={'name': 'replacement'})
+    assert response.status_code == 201
+    replacement = response.json()
+    new_headers = {'Authorization': 'Bearer ' + replacement['api_key']}
+    assert client.get('/api/v1/workspaces/current', headers=new_headers).json()['id'] == original['project_id']
+    assert client.delete(path + '/' + original['api_key_id'], headers=new_headers).status_code == 204
+    assert client.get('/api/v1/workspaces/current', headers=headers).status_code == 401
+    assert client.get('/application-scope', headers=headers).status_code == 401
+    assert client.get('/application-scope', headers=new_headers).status_code == 200
+
+
+def test_workspace_identity_rejects_admin_metrics_missing_and_invalid_keys_even_in_dev(account_app, monkeypatch):
+    client, _ = account_app
+    monkeypatch.setattr(auth.settings, 'REQUIRE_API_KEY', False)
+    for key in ['', 'wrong-key', 'admin-secret', 'dc_session_invalid']:
+        headers = {'Authorization': 'Bearer ' + key} if key else {}
+        for path in ['/current', '/current/keys', '/integration']:
+            assert client.get('/api/v1/workspaces' + path, headers=headers).status_code == 401
+        assert client.post('/api/v1/workspaces/current/keys', headers=headers, json={'name': 'bad'}).status_code == 401
+
+
+def test_workspace_metrics_ignore_other_tenant_and_integration_hides_provider_secret(account_app, monkeypatch):
+    client, factory = account_app
+    alice, headers = create_workspace(client)
+    bob, _ = create_workspace(client)
+    monkeypatch.setattr(auth.settings, 'DEFAULT_MODEL', 'claude-sonnet-5-5')
+    monkeypatch.setattr(auth.settings, 'ANTHROPIC_API_KEY', 'private-provider-secret')
+    with factory() as db:
+        for index, workspace in enumerate([alice, bob]):
+            db.add(RequestRecord(request_id=f'r-{index}', tenant_id=workspace['tenant_id'], model='claude-test', messages_json=[], prompt_text=f'private-{index}', prompt_hash=str(index)*64))
+            db.add(CacheEvent(request_id=f'r-{index}', tenant_id=workspace['tenant_id'], model='claude-test', cache_status=CacheStatus.MISS, threshold_used=.9, latency_ms=10))
+        db.commit()
+    result = client.get('/api/v1/metrics/requests', headers=headers, params={'tenant_id': bob['tenant_id']})
+    assert result.status_code == 200
+    assert result.json()['total'] == 1
+    assert result.json()['items'][0]['prompt'] == 'private-0'
+    response = client.get('/api/v1/workspaces/integration', headers=headers)
+    assert response.json()['default_model'] == 'claude-sonnet-5-5'
+    assert 'private-provider-secret' not in response.text
+
+
+def test_workspace_create_validates_labels_and_throttles(account_app):
+    client, factory = account_app
+    assert client.post('/api/v1/workspaces', json={'name': '  '}).status_code == 422
+    workspace, _ = create_workspace(client, '  My bot  ')
+    assert workspace['project_name'] == 'My bot'
+    with factory() as db:
+        attempt = db.query(AuthAttempt).one()
+        db.add_all([AuthAttempt(client_hash=attempt.client_hash, created_at=datetime.now(timezone.utc)) for _ in range(19)])
+        db.commit()
+    assert client.post('/api/v1/workspaces', json={'name': 'Another bot'}).status_code == 429
