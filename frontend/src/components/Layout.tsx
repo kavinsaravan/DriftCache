@@ -26,6 +26,7 @@ export default function Layout() {
   const queryClient = useQueryClient();
   const [key, setKey] = useState(getMetricsKey);
   const [saved, setSaved] = useState(false);
+  const canViewData = !connection?.loading && (!!connection?.workspace || !!getMetricsKey() || USE_MOCK_DATA);
   const showTopBar = !!connection?.workspace || USE_MOCK_DATA || location.pathname !== '/applications';
   useEffect(() => {
     if (connection?.workspace) { setKey(''); setSaved(false); }
@@ -45,7 +46,7 @@ export default function Layout() {
 
         {/* Navigation */}
         <nav className="p-4 space-y-1">
-          {navigation.map((item) => {
+          {navigation.filter(item => item.href === '/applications' || canViewData).map((item) => {
             const isActive = location.pathname === item.href;
             return (
               <Link
