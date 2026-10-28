@@ -60,11 +60,11 @@ export default function Applications() {
       <p className="text-sm text-gray-500">The name is a label. Only the generated key grants access.</p>
       <button disabled={busy} className="bg-blue-600 text-white rounded px-4 py-2 disabled:opacity-50">Create workspace</button>
     </form>}
-    <form onSubmit={connect} className="bg-white border rounded-xl p-6 space-y-4">
+    {!created && <form onSubmit={connect} className="bg-white border rounded-xl p-6 space-y-4">
       <h2 className="text-lg font-semibold">Connect with key</h2>
       <label className="block">Workspace API key<input required type="password" autoComplete="off" className="block border rounded p-2 w-full mt-1" value={credential} onChange={e => setCredential(e.target.value)} placeholder="dc_live_…" /></label>
       <button disabled={busy} className="bg-blue-600 text-white rounded px-4 py-2 disabled:opacity-50">Connect workspace</button>
-    </form>
+    </form>}
   </div>;
   return <div className="max-w-4xl space-y-6">
     <h1 className="text-2xl font-bold">{workspace.name}</h1>

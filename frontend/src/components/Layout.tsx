@@ -26,6 +26,7 @@ export default function Layout() {
   const queryClient = useQueryClient();
   const [key, setKey] = useState(getMetricsKey);
   const [saved, setSaved] = useState(false);
+  const showTopBar = !!connection?.workspace || USE_MOCK_DATA || location.pathname !== '/applications';
   useEffect(() => {
     if (connection?.workspace) { setKey(''); setSaved(false); }
   }, [connection?.workspace]);
@@ -75,7 +76,7 @@ export default function Layout() {
       {/* Main Content */}
       <div className="pl-64">
         {/* Top Bar */}
-        <div className="bg-white border-b border-gray-200 px-8 py-4">
+        {showTopBar && <div className="bg-white border-b border-gray-200 px-8 py-4">
           {USE_MOCK_DATA && connection?.workspace && <p className="text-amber-800 mb-3">Demo mode — showing sample data.</p>}
           {connection?.workspace ? <div className="flex items-center gap-4">
             <span className="font-medium">{connection.workspace.name}</span>
@@ -100,7 +101,7 @@ export default function Layout() {
             </form>
             </details>
           )}
-        </div>
+        </div>}
 
         {/* Page Content */}
         <main className="p-8">
