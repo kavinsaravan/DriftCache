@@ -1,21 +1,32 @@
 import { useWorkspace } from '../context/workspaceState';
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getRequestHistory, getMetricsError } from '../api/metricsApi';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { REFETCH_INTERVALS } from '../utils/constants';
 
 const PAGE_SIZE = 100;
 export default function RequestExplorer() {
+  const queryClient = useQueryClient();
   const scope = useWorkspace()?.workspace?.id || 'key-access';
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
   const [offset, setOffset] = useState(0);
-  const { data, isLoading, error, refetch } = useQuery({
+  const { data, isLoading, isFetching, dataUpdatedAt, error, refetch } = useQuery({
     queryKey: ['request-explorer', scope, offset],
     queryFn: () => getRequestHistory(offset, PAGE_SIZE),
     refetchInterval: REFETCH_INTERVALS.FAST,
   });
+  const refresh = () => {
+    if (offset === 0) {
+      void refetch();
+    } else {
+      // Mark the cached first page stale before selecting it, so Refresh always
+      // fetches the latest decisions rather than reusing an earlier page.
+      void queryClient.invalidateQueries({ queryKey: ['request-explorer', scope, 0], exact: true });
+      setOffset(0);
+    }
+  };
   const items = (data?.items || []).filter((item) => {
     const matchesStatus = status === 'all' || (status === 'hit'
       ? item.status === 'HIT'
@@ -36,15 +47,22 @@ export default function RequestExplorer() {
     URL.revokeObjectURL(url);
   };
   if (isLoading) return <LoadingSpinner message="Loading requests..." />;
-  if (error) return <div role="alert" className="bg-red-50 p-4">{getMetricsError(error)}</div>;
   return (
     <div className="space-y-6">
       <div className="flex justify-between">
         <div><h1 className="text-3xl font-bold">Request Explorer</h1>
           <p className="text-gray-600">Individual cache decisions from the last 24 hours, newest first.</p></div>
         <button onClick={exportCsv} className="border rounded px-4 py-2">Export this page</button>
-        <button onClick={() => void refetch()} className="border rounded px-4 py-2">Refresh</button>
+        <button onClick={refresh} disabled={isFetching} className="border rounded px-4 py-2 disabled:opacity-50">
+          {isFetching ? 'Refreshing…' : 'Refresh'}
+        </button>
       </div>
+      <p role="status" className="text-sm text-gray-500">
+        {isFetching ? 'Fetching the latest requests…' : dataUpdatedAt ? `Last updated ${new Date(dataUpdatedAt).toLocaleTimeString()}. Refresh checks for new requests.` : 'No requests loaded yet.'}
+      </p>
+      {error && <div role="alert" className="bg-red-50 text-red-800 p-4 rounded">
+        {getMetricsError(error)} {data ? 'Showing previously loaded requests. Select Refresh to try again.' : 'Select Refresh to try again.'}
+      </div>}
       <div className="flex gap-4 bg-white p-4 rounded">
         <label>Search this page
           <input className="border rounded px-3 py-2 ml-2" value={search} onChange={(event) => setSearch(event.target.value)} />
@@ -56,7 +74,7 @@ export default function RequestExplorer() {
         </label>
       </div>
       <p>Showing {items.length} matching decisions on this page · {data?.total || 0} total decisions</p>
-      <div className="bg-white rounded overflow-x-auto">
+      <div className="bg-white rounded overflow-x-auto" aria-busy={isFetching}>
         <table className="min-w-full text-sm text-left">
           <thead><tr>{['Timestamp', 'Prompt', 'Model', 'Status', 'Similarity', 'Lookup latency'].map((title) => <th key={title} className="p-3">{title}</th>)}</tr></thead>
           <tbody>{items.map((item) => <tr key={item.event_id} className="border-t">
