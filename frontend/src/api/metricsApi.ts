@@ -4,7 +4,7 @@
  * Connects to DriftCache backend metrics endpoints
  */
 import axios from 'axios';
-import { API_BASE_URL, getWorkspaceKey, saveWorkspaceKey } from './workspaceApi';
+import { API_BASE_URL, getWorkspaceKey, saveWorkspaceKey, workspaceApi } from './workspaceApi';
 import {
   mockDashboardData,
   mockTimeSeriesHitRate,
@@ -121,6 +121,11 @@ export const getDashboardData = async (period = '24h', tenantId?: string): Promi
     throw new Error('Invalid dashboard response');
   }
   return response.data;
+};
+
+export const clearRequestHistory = async (): Promise<{deleted_requests: number}> => {
+  if (USE_MOCK_DATA) throw new Error('Clearing requests is unavailable in demo mode.');
+  return (await workspaceApi.delete('/current/requests')).data;
 };
 
 export const getRequestHistory = async (offset = 0, limit = 100): Promise<RequestHistory> => {

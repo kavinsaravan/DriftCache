@@ -1,7 +1,8 @@
 import { useWorkspace } from '../context/workspaceState';
 import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getRequestHistory, getMetricsError } from '../api/metricsApi';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { getRequestHistory, clearRequestHistory, getMetricsError, USE_MOCK_DATA } from '../api/metricsApi';
+import { workspaceError } from '../api/workspaceApi';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { REFETCH_INTERVALS } from '../utils/constants';
 
@@ -17,14 +18,18 @@ export default function RequestExplorer() {
     queryFn: () => getRequestHistory(offset, PAGE_SIZE),
     refetchInterval: REFETCH_INTERVALS.FAST,
   });
-  const refresh = () => {
-    if (offset === 0) {
-      void refetch();
-    } else {
-      // Mark the cached first page stale before selecting it, so Refresh always
-      // fetches the latest decisions rather than reusing an earlier page.
-      void queryClient.invalidateQueries({ queryKey: ['request-explorer', scope, 0], exact: true });
-      setOffset(0);
+  const clearHistory = useMutation({
+    mutationFn: clearRequestHistory,
+    onMutate: () => queryClient.cancelQueries({queryKey: ['request-explorer', scope]}),
+    onSuccess: async () => {
+      setSearch(''); setStatus('all'); setOffset(0);
+      queryClient.setQueriesData({queryKey: ['request-explorer', scope]}, {total: 0, items: []});
+      await queryClient.invalidateQueries({queryKey: ['request-explorer', scope]});
+    },
+  });
+  const clearRequests = () => {
+    if (window.confirm('Permanently clear all request history for this workspace? Cached responses and dashboard metrics will be kept. This cannot be undone.')) {
+      clearHistory.mutate();
     }
   };
   const items = (data?.items || []).filter((item) => {
@@ -53,16 +58,23 @@ export default function RequestExplorer() {
         <div><h1 className="text-3xl font-bold">Request Explorer</h1>
           <p className="text-gray-600">Individual cache decisions from the last 24 hours, newest first.</p></div>
         <button onClick={exportCsv} className="border rounded px-4 py-2">Export this page</button>
-        <button onClick={refresh} disabled={isFetching} className="border rounded px-4 py-2 disabled:opacity-50">
-          {isFetching ? 'Refreshing…' : 'Refresh'}
+        <button onClick={clearRequests} disabled={clearHistory.isPending || USE_MOCK_DATA} className="border rounded px-4 py-2 disabled:opacity-50">
+          {clearHistory.isPending ? 'Clearing…' : 'Clear requests'}
         </button>
       </div>
       <p role="status" className="text-sm text-gray-500">
-        {isFetching ? 'Fetching the latest requests…' : dataUpdatedAt ? `Last updated ${new Date(dataUpdatedAt).toLocaleTimeString()}. Refresh checks for new requests.` : 'No requests loaded yet.'}
+        {isFetching ? 'Fetching the latest requests…' : dataUpdatedAt ? `Last updated ${new Date(dataUpdatedAt).toLocaleTimeString()}. Request history updates automatically.` : 'No requests loaded yet.'}
       </p>
       {error && <div role="alert" className="bg-red-50 text-red-800 p-4 rounded">
-        {getMetricsError(error)} {data ? 'Showing previously loaded requests. Select Refresh to try again.' : 'Select Refresh to try again.'}
+        {getMetricsError(error)} {data ? 'Showing previously loaded requests.' : ''}
+        <button className="underline ml-2" onClick={() => void refetch()}>Retry loading</button>
       </div>}
+      {clearHistory.error && <div role="alert" className="bg-red-50 text-red-800 p-4 rounded">
+        Unable to clear requests. {workspaceError(clearHistory.error)}
+      </div>}
+      {clearHistory.isSuccess && <p role="status" className="text-green-800">
+        Cleared {clearHistory.data.deleted_requests} request{clearHistory.data.deleted_requests === 1 ? '' : 's'}. Cached responses and dashboard metrics were kept.
+      </p>}
       <div className="flex gap-4 bg-white p-4 rounded">
         <label>Search this page
           <input className="border rounded px-3 py-2 ml-2" value={search} onChange={(event) => setSearch(event.target.value)} />

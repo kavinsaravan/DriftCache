@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.model_catalog import integration_configuration
 from app.database.session import get_db
 from app.models.project import Project, ProjectAPIKey
+from app.models.request import Request as RequestRecord
 from app.models.project_schemas import (
     ProjectCreate, ProjectCredentialResponse, ProjectKeyCreate, ProjectKeyResponse,
     ProjectKeySummary, ProjectSummary,
@@ -51,6 +52,20 @@ def create_workspace(body: WorkspaceCreate, request: Request, response: Response
 def current_workspace(response: Response, identity: AuthContext = Depends(workspace_identity), db: Session = Depends(get_db)):
     response.headers["Cache-Control"] = "no-store"
     return db.get(Project, identity.project_id)
+
+
+@router.delete("/current/requests")
+def clear_requests(identity: AuthContext = Depends(workspace_identity), db: Session = Depends(get_db)):
+    """Delete this workspace's request history, preserving cache and aggregate metrics."""
+    try:
+        deleted = db.query(RequestRecord).filter(
+            RequestRecord.tenant_id == identity.tenant_id,
+        ).delete(synchronize_session=False)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return {"deleted_requests": deleted}
 
 
 @router.get("/integration", response_model=IntegrationConfiguration)

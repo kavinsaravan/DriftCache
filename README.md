@@ -119,6 +119,13 @@ application's server. Only a hash is stored in the database. There is no recover
 if all valid keys are lost. Creating another workspace with the same label
 creates a new, empty workspace with a different key and tenant.
 
+**Clear requests** on Request Explorer permanently deletes all request-history
+rows for the connected workspace, including older pages and dates. It asks for
+confirmation. Cached responses, cache-decision metrics and provider-call totals
+are retained, so dashboard totals do not reset. New requests appear normally
+afterward. A valid workspace key is required; read-only metrics keys cannot clear
+history.
+
 Keys can be created and revoked on the Workspace page. To rotate the connection
 key, save a new key, disconnect, connect with the new key, then revoke the old
 one. Revoking the key currently authenticating the request is rejected to avoid
@@ -167,6 +174,7 @@ Self-service endpoints (relative to `/api/v1`):
 POST   /workspaces
 GET    /workspaces/current
 GET    /workspaces/integration
+DELETE /workspaces/current/requests
 GET    /workspaces/current/keys
 POST   /workspaces/current/keys
 DELETE /workspaces/current/keys/{key_id}

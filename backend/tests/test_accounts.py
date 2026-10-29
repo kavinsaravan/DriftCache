@@ -265,3 +265,53 @@ def test_workspace_create_validates_labels_and_throttles(account_app):
         db.add_all([AuthAttempt(client_hash=attempt.client_hash, created_at=datetime.now(timezone.utc)) for _ in range(19)])
         db.commit()
     assert client.post('/api/v1/workspaces', json={'name': 'Another bot'}).status_code == 429
+
+
+def test_clear_requests_is_workspace_scoped_and_preserves_cache_and_metrics(account_app):
+    from app.models.cache_entry import CacheEntry
+    from app.models.provider_call import ProviderCall
+    client, factory = account_app
+    alice, headers = create_workspace(client)
+    bob, bob_headers = create_workspace(client)
+    with factory() as db:
+        # Register tables in case only the lightweight router models were loaded.
+        CacheEntry.__table__.create(bind=db.get_bind(), checkfirst=True)
+        ProviderCall.__table__.create(bind=db.get_bind(), checkfirst=True)
+        for index, workspace in enumerate([alice, alice, bob]):
+            recorded_at = datetime.now(timezone.utc) - timedelta(days=30 if index == 1 else 0)
+            db.add(RequestRecord(request_id=f'clear-{index}', tenant_id=workspace['tenant_id'], model='claude-test', messages_json=[], prompt_text=f'prompt-{index}', prompt_hash=str(index)*64, created_at=recorded_at))
+            db.add(CacheEvent(request_id=f'clear-{index}', tenant_id=workspace['tenant_id'], model='claude-test', cache_status=CacheStatus.MISS, threshold_used=.9, latency_ms=10, created_at=recorded_at))
+        db.add(CacheEntry(cache_id='preserved-cache', tenant_id=alice['tenant_id'], model='claude-test', prompt_text='cached prompt', prompt_hash='c'*64, response_text='cached answer'))
+        db.add(ProviderCall(request_id='clear-0', tenant_id=alice['tenant_id'], provider='anthropic', model='claude-test', estimated_cost=.01, latency_ms=100))
+        db.commit()
+    before = client.get('/api/v1/metrics/dashboard', headers=headers).json()['summary']
+    cleared = client.delete('/api/v1/workspaces/current/requests', headers=headers, params={'tenant_id': bob['tenant_id']})
+    assert cleared.status_code == 200
+    assert cleared.json() == {'deleted_requests': 2}  # Includes history older than 24 hours.
+    assert client.get('/api/v1/metrics/requests', headers=headers).json() == {'total': 0, 'items': []}
+    assert client.get('/api/v1/metrics/requests', headers=bob_headers).json()['total'] == 1
+    assert client.get('/api/v1/metrics/dashboard', headers=headers).json()['summary'] == before
+    with factory() as db:
+        assert db.query(CacheEntry).filter_by(cache_id='preserved-cache').one().response_text == 'cached answer'
+        assert db.query(CacheEvent).count() == 3
+        assert db.query(ProviderCall).count() == 1
+        assert db.query(RequestRecord).count() == 1
+    assert client.delete('/api/v1/workspaces/current/requests', headers=headers).json() == {'deleted_requests': 0}
+    with factory() as db:
+        db.add(RequestRecord(request_id='after-clear', tenant_id=alice['tenant_id'], model='claude-test', messages_json=[], prompt_text='new request', prompt_hash='d'*64))
+        db.add(CacheEvent(request_id='after-clear', tenant_id=alice['tenant_id'], model='claude-test', cache_status=CacheStatus.HIT, threshold_used=.9, latency_ms=1))
+        db.commit()
+    history = client.get('/api/v1/metrics/requests', headers=headers).json()
+    assert history['total'] == 1 and history['items'][0]['prompt'] == 'new request'
+
+
+def test_clear_requests_rejects_read_only_admin_and_revoked_credentials(account_app, monkeypatch):
+    client, factory = account_app
+    _, headers = create_workspace(client)
+    with factory() as db:
+        db.query(ProjectAPIKey).update({'is_active': False})
+        db.commit()
+    monkeypatch.setattr(auth.settings, 'METRICS_API_KEY', 'read-only-metrics')
+    monkeypatch.setattr(auth.settings, 'REQUIRE_API_KEY', False)
+    for credentials in [{}, headers, {'Authorization': 'Bearer admin-secret'}, {'Authorization': 'Bearer read-only-metrics'}]:
+        assert client.delete('/api/v1/workspaces/current/requests', headers=credentials).status_code == 401

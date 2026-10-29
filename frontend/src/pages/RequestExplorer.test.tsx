@@ -2,11 +2,11 @@ import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/re
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, expect, it, vi } from 'vitest';
 import RequestExplorer from './RequestExplorer';
-import { getRequestHistory } from '../api/metricsApi';
+import { getRequestHistory, clearRequestHistory } from '../api/metricsApi';
 vi.mock('../api/metricsApi', () => ({
-  getRequestHistory: vi.fn(), getMetricsError: () => 'Unable to load requests',
+  getRequestHistory: vi.fn(), clearRequestHistory: vi.fn(), USE_MOCK_DATA: false, getMetricsError: () => 'Unable to load requests',
 }));
-afterEach(() => { cleanup(); vi.resetAllMocks(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.resetAllMocks(); });
 function show() {
   return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><RequestExplorer /></QueryClientProvider>);
 }
@@ -34,46 +34,62 @@ function event(id: number, prompt: string) {
     similarity: 1, latency_ms: 10, created_at: '2026-10-28T07:00:00Z'};
 }
 
-it('shows refresh progress and replaces the table with newly fetched requests', async () => {
-  let finish!: (value: {total: number; items: ReturnType<typeof event>[]}) => void;
-  vi.mocked(getRequestHistory).mockResolvedValueOnce({total: 1, items: [event(1, 'old request')]})
-    .mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
-  show();
-  await screen.findByText('old request');
-  fireEvent.click(screen.getByRole('button', {name: 'Refresh'}));
-  expect(await screen.findByRole('button', {name: 'Refreshing…'})).toBeDisabled();
-  expect(screen.getByText('old request')).toBeInTheDocument();
-  finish({total: 2, items: [event(2, 'new request'), event(1, 'old request')]});
-  await screen.findByText('new request');
-  expect(screen.getByRole('button', {name: 'Refresh'})).toBeEnabled();
-  expect(screen.getByRole('status')).toHaveTextContent('Last updated');
-  expect(screen.getByText(/2 total decisions/)).toBeInTheDocument();
-});
-
-it('keeps loaded rows and lets the user retry a failed refresh', async () => {
-  vi.mocked(getRequestHistory).mockResolvedValueOnce({total: 1, items: [event(1, 'existing request')]})
-    .mockRejectedValueOnce(new Error('offline'))
-    .mockResolvedValueOnce({total: 1, items: [event(2, 'recovered request')]});
+it('confirms before clearing and leaves history untouched when cancelled', async () => {
+  vi.spyOn(window, 'confirm').mockReturnValue(false);
+  vi.mocked(getRequestHistory).mockResolvedValue({total: 1, items: [event(1, 'existing request')]});
   show();
   await screen.findByText('existing request');
-  fireEvent.click(screen.getByRole('button', {name: 'Refresh'}));
-  expect(await screen.findByRole('alert')).toHaveTextContent('Showing previously loaded requests');
+  expect(screen.queryByRole('button', {name: 'Refresh'})).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', {name: 'Clear requests'}));
+  expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('cannot be undone'));
+  expect(clearRequestHistory).not.toHaveBeenCalled();
   expect(screen.getByText('existing request')).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', {name: 'Refresh'}));
-  await screen.findByText('recovered request');
-  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
 
-it('refreshes the newest page when the user is viewing older requests', async () => {
+it('clears history and filters with visible progress and confirmation of success', async () => {
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
+  let finish!: (value: {deleted_requests: number}) => void;
+  vi.mocked(getRequestHistory).mockResolvedValueOnce({total: 1, items: [event(1, 'old request')]})
+    .mockResolvedValue({total: 0, items: []});
+  vi.mocked(clearRequestHistory).mockImplementationOnce(() => new Promise(resolve => {finish = resolve;}));
+  show();
+  await screen.findByText('old request');
+  fireEvent.change(screen.getByLabelText('Search this page'), {target: {value: 'old'}});
+  fireEvent.change(screen.getByLabelText('Cache status'), {target: {value: 'hit'}});
+  fireEvent.click(screen.getByRole('button', {name: 'Clear requests'}));
+  expect(await screen.findByRole('button', {name: 'Clearing…'})).toBeDisabled();
+  finish({deleted_requests: 1});
+  await screen.findByText(/Cleared 1 request\./);
+  expect(screen.queryByText('old request')).not.toBeInTheDocument();
+  expect(screen.getByText(/0 total decisions/)).toBeInTheDocument();
+  expect(screen.getByLabelText('Search this page')).toHaveValue('');
+  expect(screen.getByLabelText('Cache status')).toHaveValue('all');
+});
+
+it('retains rows when clearing fails and allows another attempt', async () => {
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
+  vi.mocked(getRequestHistory).mockResolvedValue({total: 1, items: [event(1, 'existing request')]});
+  vi.mocked(clearRequestHistory).mockRejectedValueOnce(new Error('offline'));
+  show();
+  await screen.findByText('existing request');
+  fireEvent.click(screen.getByRole('button', {name: 'Clear requests'}));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Unable to clear requests');
+  expect(screen.getByText('existing request')).toBeInTheDocument();
+  expect(screen.getByRole('button', {name: 'Clear requests'})).toBeEnabled();
+});
+
+it('returns to the first page after clearing older requests', async () => {
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
   vi.mocked(getRequestHistory).mockResolvedValueOnce({total: 101, items: [event(2, 'first page request')]})
     .mockResolvedValueOnce({total: 101, items: [event(1, 'older page request')]})
-    .mockResolvedValueOnce({total: 102, items: [event(3, 'latest request')]});
+    .mockResolvedValue({total: 0, items: []});
+  vi.mocked(clearRequestHistory).mockResolvedValue({deleted_requests: 101});
   show();
   await screen.findByText('first page request');
   fireEvent.click(screen.getByRole('button', {name: 'Next'}));
   await screen.findByText('older page request');
-  fireEvent.click(screen.getByRole('button', {name: 'Refresh'}));
-  await screen.findByText('latest request');
-  expect(getRequestHistory).toHaveBeenLastCalledWith(0, 100);
+  fireEvent.click(screen.getByRole('button', {name: 'Clear requests'}));
+  await screen.findByText(/Cleared 101 requests/);
   expect(screen.getByRole('button', {name: 'Previous'})).toBeDisabled();
+  expect(screen.getByText(/0 total decisions/)).toBeInTheDocument();
 });
